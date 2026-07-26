@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "create-user": "tsx scripts/create-user.ts"
+    "db:generate": "node --env-file-if-exists=.env node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs scripts/migrate.ts",
+    "create-user": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs scripts/create-user.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1126.0",

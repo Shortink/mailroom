@@ -31,7 +31,10 @@ const storage = z.discriminatedUnion("STORAGE_DRIVER", [
 
 export type Config = ReturnType<typeof parseConfig>;
 
-export function parseConfig(env: Record<string, unknown>) {
+export function parseConfig(rawEnv: Record<string, unknown>) {
+  // A blank line in .env arrives as "", which is absence rather than a bad value.
+  const env = Object.fromEntries(Object.entries(rawEnv).filter(([, value]) => value !== ""));
+
   const parsedBase = base.safeParse(env);
   const parsedStorage = storage.safeParse(env);
 
