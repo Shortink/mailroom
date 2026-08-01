@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FsStorage } from "../../src/lib/storage/fs";
+import type { Storage } from "../../src/lib/storage/types";
 import { testStorage } from "./conformance";
 
 let dir: string | undefined;
@@ -18,7 +19,7 @@ testStorage("FsStorage", make, async () => {
 
 describe("FsStorage path safety", () => {
   it("refuses a key that escapes the storage root", async () => {
-    const storage = await make();
+    const storage: Storage = await make();
     await expect(storage.put("../escaped", Buffer.from("x"), "text/plain")).rejects.toThrow(/escape/i);
   });
 });

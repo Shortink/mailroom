@@ -31,7 +31,7 @@ describe("parseConfig", () => {
 
   it("accepts a complete postgres-driver config", () => {
     const cfg = parseConfig({ ...base, STORAGE_DRIVER: "postgres" });
-    expect(cfg.storage.driver).toBe("postgres");
+    expect(cfg.storage.STORAGE_DRIVER).toBe("postgres");
     expect(cfg.requireTotp).toBe(true);
   });
 
