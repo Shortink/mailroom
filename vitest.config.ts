@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -14,6 +15,9 @@ process.env.STORAGE_DRIVER ||= "fs";
 process.env.FS_STORAGE_PATH ||= "./storage/test";
 
 export default defineConfig({
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
