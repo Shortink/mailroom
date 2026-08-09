@@ -13,6 +13,11 @@ vi.mock("../../src/lib/mail/resend", () => ({
   downloadAttachment: (url: string) => downloadAttachment(url),
 }));
 
+const forwardCopy = vi.fn();
+vi.mock("../../src/lib/mail/forward", () => ({
+  forwardCopy: (id: string) => forwardCopy(id),
+}));
+
 const put = vi.fn();
 vi.mock("../../src/lib/storage", () => ({
   getStorage: () => ({ put, get: vi.fn(), delete: vi.fn(), url: (k: string) => `/a/${k}` }),
@@ -41,6 +46,7 @@ beforeEach(async () => {
   getAttachment.mockReset();
   downloadAttachment.mockReset();
   put.mockReset();
+  forwardCopy.mockReset();
   await db.execute(sql`truncate table messages, threads, addresses, attachments restart identity cascade`);
 });
 
@@ -162,6 +168,15 @@ describe("completeIngest", () => {
 
     const [after] = await db.select().from(messages).where(eq(messages.id, row.id));
     expect(after.status).toBe("failed");
+  });
+
+  it("forwards a copy once the message is complete", async () => {
+    getReceivedEmail.mockResolvedValue({ id: "r9", subject: "Hi" });
+
+    const row = await pending("r9");
+    await completeIngest(row.id);
+
+    expect(forwardCopy).toHaveBeenCalledWith(row.id);
   });
 
   it("does nothing for a message already complete", async () => {
