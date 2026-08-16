@@ -91,6 +91,9 @@ export const attachments = pgTable("attachments", {
 export const addresses = pgTable("addresses", {
   address: text("address").primaryKey(),
   label: text("label"),
+  // Catch-all receiving means bots create an inbox for every address they
+  // guess, so the sidebar lists pinned addresses and collapses the rest.
+  pinned: boolean("pinned").notNull().default(false),
   hidden: boolean("hidden").notNull().default(false),
 });
 

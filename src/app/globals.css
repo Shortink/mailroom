@@ -1,1 +1,84 @@
 @import "tailwindcss";
+
+:root {
+  --bg: #ffffff;
+  --panel: #fafafa;
+  --hover: #f4f4f5;
+  --well: #f7f7f8;
+  --rule: #e8e8eb;
+  --ink: #18181b;
+  --ink-2: #52525b;
+  --ink-3: #71717a;
+  --accent: #2f7d4f;
+  --accent-ink: #ffffff;
+  --sel: #ecf3ef;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0a0a0c;
+    --panel: #101012;
+    --hover: #18181b;
+    --well: #141416;
+    --rule: #242427;
+    --ink: #fafafa;
+    --ink-2: #a1a1aa;
+    --ink-3: #7e7e88;
+    --accent: #42be65;
+    --accent-ink: #07160d;
+    --sel: #14241b;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-hover: var(--hover);
+  --color-well: var(--well);
+  --color-rule: var(--rule);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-sel: var(--sel);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* Surfaces the browser draws for us still belong to the design. */
+::selection {
+  background: var(--sel);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 6px;
+  border: 3px solid var(--bg);
+}
