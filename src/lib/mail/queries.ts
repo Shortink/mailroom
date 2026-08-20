@@ -9,6 +9,7 @@ export interface ThreadSummary {
   messageCount: number;
   unread: number;
   from: string | null;
+  fromName: string | null;
   snippet: string | null;
   deliveredTo: string | null;
   hasAttachment: boolean;
@@ -41,6 +42,7 @@ export async function listThreads(opts: { address?: string; search?: string }) {
       messageCount: threads.messageCount,
       unread: sql<number>`count(*) filter (where ${messages.readAt} is null and ${messages.direction} = 'inbound')::int`,
       from: sql<string | null>`(array_agg(${messages.fromAddress} order by ${messages.receivedAt} desc))[1]`,
+      fromName: sql<string | null>`(array_agg(${messages.fromName} order by ${messages.receivedAt} desc))[1]`,
       snippet: sql<string | null>`(array_agg(${messages.textBody} order by ${messages.receivedAt} desc))[1]`,
       deliveredTo: sql<string | null>`(array_agg(${messages.deliveredTo} order by ${messages.receivedAt} desc))[1]`,
       hasAttachment: sql<boolean>`bool_or(${attachments.id} is not null)`,

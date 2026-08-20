@@ -52,7 +52,7 @@ export default async function InboxPage({
               <span
                 className={`truncate ${thread.unread > 0 ? "font-medium text-ink" : "text-ink-2"}`}
               >
-                {thread.from ?? "Unknown sender"}
+                {thread.fromName ?? thread.from ?? "Unknown sender"}
               </span>
               <span className={`truncate ${thread.unread > 0 ? "font-semibold" : ""}`}>
                 {thread.subject || "(no subject)"}
