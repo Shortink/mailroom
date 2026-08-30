@@ -11,7 +11,18 @@ function totpFor(secret: string, email: string) {
   });
 }
 
+export class AlreadyEnrolled extends Error {
+  constructor() {
+    super("Two-factor is already set up for this account.");
+  }
+}
+
+// Overwriting a confirmed secret would let anyone holding only the password
+// replace the second factor with their own.
 export async function startEnrolment(userId: string) {
+  const [existing] = await db.select().from(users).where(eq(users.id, userId));
+  if (existing?.totpConfirmedAt) throw new AlreadyEnrolled();
+
   const secret = new Secret().base32;
 
   const [user] = await db

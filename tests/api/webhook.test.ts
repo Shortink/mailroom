@@ -8,6 +8,8 @@ vi.mock("../../src/lib/mail/ingest", () => ({
   completeIngest: (id: string) => completeIngest(id),
 }));
 
+// The real Webhook.verify() only checks the signature (throwing on failure)
+// and always returns undefined; the route parses the body itself.
 const verify = vi.fn();
 vi.mock("svix", () => ({
   Webhook: class {
@@ -44,6 +46,7 @@ const received = {
 beforeEach(async () => {
   completeIngest.mockReset();
   verify.mockReset();
+  verify.mockReturnValue(undefined);
   await db.execute(sql`truncate table messages, threads, addresses restart identity cascade`);
 });
 
@@ -68,8 +71,6 @@ describe("resend webhook", () => {
   });
 
   it("stores one pending message and returns 200", async () => {
-    verify.mockReturnValue(received);
-
     const { POST } = await route();
     const response = await POST(post(received));
 
@@ -84,8 +85,6 @@ describe("resend webhook", () => {
   });
 
   it("is idempotent across retries of the same delivery", async () => {
-    verify.mockReturnValue(received);
-
     const { POST } = await route();
     await POST(post(received));
     await POST(post(received));
@@ -96,8 +95,6 @@ describe("resend webhook", () => {
   });
 
   it("leaves no orphan thread when a retry is discarded", async () => {
-    verify.mockReturnValue(received);
-
     const { POST } = await route();
     await POST(post(received));
     await POST(post(received));
@@ -106,42 +103,75 @@ describe("resend webhook", () => {
   });
 
   it("falls back to the to field when received_for is absent", async () => {
-    verify.mockReturnValue({
+    const event = {
       type: "email.received",
       data: { email_id: "hook-2", to: ["hi@example.test"], from: "s@vendor.test" },
-    });
+    };
 
     const { POST } = await route();
-    await POST(post(received));
+    await POST(post(event));
 
     const [row] = await db.select().from(messages).where(eq(messages.resendId, "hook-2"));
     expect(row.deliveredTo).toBe("hi@example.test");
   });
 
   it("ignores its own forwarded copies", async () => {
-    verify.mockReturnValue({
+    const { forwardMarker } = await import("../../src/lib/mail/marker");
+    const event = {
       type: "email.received",
       data: {
         email_id: "hook-3",
         to: ["hi@example.test"],
-        headers: { "x-forwarded-by": "resend-mail-client" },
+        headers: { "x-forwarded-by": forwardMarker() },
       },
-    });
+    };
 
     const { POST } = await route();
-    const response = await POST(post(received));
+    const response = await POST(post(event));
 
     expect(response.status).toBe(200);
     expect(await db.select().from(messages).where(eq(messages.resendId, "hook-3"))).toHaveLength(0);
   });
 
   it("acknowledges event types it does not handle", async () => {
-    verify.mockReturnValue({ type: "email.delivered", data: { email_id: "other" } });
+    const event = { type: "email.delivered", data: { email_id: "other" } };
 
     const { POST } = await route();
-    const response = await POST(post(received));
+    const response = await POST(post(event));
 
     expect(response.status).toBe(200);
     expect(await db.select().from(messages)).toHaveLength(0);
+  });
+});
+
+describe("forward loop guard cannot be forged", () => {
+  it("ignores only the deployment's own marker", async () => {
+    const { forwardMarker } = await import("../../src/lib/mail/marker");
+    const event = {
+      type: "email.received",
+      data: { email_id: "mine", to: ["hi@example.test"], headers: { "x-forwarded-by": forwardMarker() } },
+    };
+
+    const { POST } = await route();
+    await POST(post(event));
+
+    expect(await db.select().from(messages).where(eq(messages.resendId, "mine"))).toHaveLength(0);
+  });
+
+  it("stores mail carrying an attacker-supplied marker rather than dropping it", async () => {
+    const event = {
+      type: "email.received",
+      data: {
+        email_id: "forged",
+        to: ["hi@example.test"],
+        headers: { "x-forwarded-by": "resend-mail-client" },
+      },
+    };
+
+    const { POST } = await route();
+    await POST(post(event));
+
+    const rows = await db.select().from(messages).where(eq(messages.resendId, "forged"));
+    expect(rows).toHaveLength(1);
   });
 });

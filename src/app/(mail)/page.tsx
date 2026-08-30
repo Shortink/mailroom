@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClipIcon, SearchIcon } from "@/components/icons";
 import { listThreads } from "@/lib/mail/queries";
 import { formatWhen } from "@/lib/format";
+import { requireUser } from "@/lib/auth/require";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ address?: string; q?: string }>;
 }) {
+  await requireUser();
   const { address, q } = await searchParams;
   const threads = await listThreads({ address, search: q });
 

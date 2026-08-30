@@ -103,8 +103,24 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   totpSecret: text("totp_secret"),
   totpConfirmedAt: timestamp("totp_confirmed_at", { withTimezone: true }),
+  // Bumped on password change, TOTP re-enrolment and logout, so outstanding
+  // stateless sessions stop verifying.
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const securityEvents = pgTable(
+  "security_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    actor: text("actor"),
+    ip: text("ip"),
+    detail: jsonb("detail"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("security_events_at_idx").on(t.at.desc())],
+);
 
 export const recoveryCodes = pgTable("recovery_codes", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -13,8 +13,8 @@ function key() {
   return new TextEncoder().encode(requireEnv("SESSION_SECRET"));
 }
 
-export function signSession(userId: string, stage: Stage) {
-  return new SignJWT({ stage })
+export function signSession(userId: string, stage: Stage, version = 0) {
+  return new SignJWT({ stage, ver: version })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
@@ -25,9 +25,13 @@ export function signSession(userId: string, stage: Stage) {
 export async function readSession(token: string | undefined) {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, key());
+    const { payload } = await jwtVerify(token, key(), { algorithms: ["HS256"] });
     if (!payload.sub) return null;
-    return { sub: payload.sub, stage: (payload.stage as Stage) ?? "full" };
+    return {
+      sub: payload.sub,
+      stage: (payload.stage as Stage) ?? "full",
+      version: typeof payload.ver === "number" ? payload.ver : 0,
+    };
   } catch {
     return null;
   }

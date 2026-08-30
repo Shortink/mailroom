@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { messages } from "../db/schema";
+import { forwardMarker } from "./marker";
 import { sendEmail } from "./resend";
 
 export async function forwardCopy(messageId: string) {
@@ -26,7 +27,7 @@ export async function forwardCopy(messageId: string) {
       html: row.htmlBody ?? undefined,
       // The webhook drops anything carrying this, so a forwarding address on
       // the receiving domain cannot create a loop.
-      headers: { "X-Forwarded-By": "resend-mail-client" },
+      headers: { "X-Forwarded-By": forwardMarker() },
     });
   } catch {
     // The message is already stored; a failed courtesy copy must not fail ingest.

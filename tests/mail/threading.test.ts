@@ -49,7 +49,7 @@ describe("resolveThread", () => {
   it("attaches on an in-reply-to match", () => {
     const result = resolveThread(
       incoming({ inReplyTo: "<a@x>" }),
-      candidates({ byMessageId: [{ messageId: "<a@x>", threadId: "T1" }] }),
+      candidates({ byMessageId: [{ messageId: "<a@x>", threadId: "T1", participants: ["a@x.test"] }] }),
     );
     expect(result).toEqual({ action: "attach", threadId: "T1" });
   });
@@ -57,7 +57,7 @@ describe("resolveThread", () => {
   it("attaches on any references entry, not just the last", () => {
     const result = resolveThread(
       incoming({ references: ["<z@x>", "<b@x>"] }),
-      candidates({ byMessageId: [{ messageId: "<b@x>", threadId: "T2" }] }),
+      candidates({ byMessageId: [{ messageId: "<b@x>", threadId: "T2", participants: ["a@x.test"] }] }),
     );
     expect(result).toEqual({ action: "attach", threadId: "T2" });
   });
@@ -66,7 +66,7 @@ describe("resolveThread", () => {
     const result = resolveThread(
       incoming({ inReplyTo: "<a@x>" }),
       candidates({
-        byMessageId: [{ messageId: "<a@x>", threadId: "T-header" }],
+        byMessageId: [{ messageId: "<a@x>", threadId: "T-header", participants: ["a@x.test"] }],
         bySubject: [{ threadId: "T-subject", participants: ["a@x.test"], lastMessageAt: now }],
       }),
     );
@@ -78,8 +78,8 @@ describe("resolveThread", () => {
       incoming({ inReplyTo: "<a@x>", references: ["<b@x>"] }),
       candidates({
         byMessageId: [
-          { messageId: "<a@x>", threadId: "T-new" },
-          { messageId: "<b@x>", threadId: "T-old" },
+          { messageId: "<a@x>", threadId: "T-new", participants: ["a@x.test"] },
+          { messageId: "<b@x>", threadId: "T-old", participants: ["a@x.test"] },
         ],
       }),
       { oldest: (ids) => (ids.includes("T-old") ? "T-old" : ids[0]) },
@@ -92,8 +92,8 @@ describe("resolveThread", () => {
       incoming({ inReplyTo: "<a@x>", references: ["<b@x>"] }),
       candidates({
         byMessageId: [
-          { messageId: "<a@x>", threadId: "T1" },
-          { messageId: "<b@x>", threadId: "T1" },
+          { messageId: "<a@x>", threadId: "T1", participants: ["a@x.test"] },
+          { messageId: "<b@x>", threadId: "T1", participants: ["a@x.test"] },
         ],
       }),
     );
@@ -156,10 +156,47 @@ describe("resolveThread", () => {
     expect(resolveThread(incoming(), candidates())).toEqual({ action: "create" });
   });
 
+  it("refuses a header match from someone outside the thread", () => {
+    const result = resolveThread(
+      incoming({ inReplyTo: "<a@x>", participants: ["stranger@evil.test"] }),
+      candidates({
+        byMessageId: [{ messageId: "<a@x>", threadId: "T1", participants: ["a@x.test"] }],
+      }),
+    );
+    expect(result).toEqual({ action: "create" });
+  });
+
+  it("refuses a forced merge from someone outside both threads", () => {
+    const result = resolveThread(
+      incoming({ inReplyTo: "<a@x>", references: ["<b@x>"], participants: ["stranger@evil.test"] }),
+      candidates({
+        byMessageId: [
+          { messageId: "<a@x>", threadId: "T-one", participants: ["a@x.test"] },
+          { messageId: "<b@x>", threadId: "T-two", participants: ["b@x.test"] },
+        ],
+      }),
+    );
+    expect(result).toEqual({ action: "create" });
+  });
+
+  it("still merges when the sender belongs to both threads", () => {
+    const result = resolveThread(
+      incoming({ inReplyTo: "<a@x>", references: ["<b@x>"] }),
+      candidates({
+        byMessageId: [
+          { messageId: "<a@x>", threadId: "T-new", participants: ["a@x.test"] },
+          { messageId: "<b@x>", threadId: "T-old", participants: ["a@x.test"] },
+        ],
+      }),
+      { oldest: (ids) => (ids.includes("T-old") ? "T-old" : ids[0]) },
+    );
+    expect(result).toEqual({ action: "merge", threadId: "T-old", absorb: ["T-new"] });
+  });
+
   it("ignores header ids that match nothing", () => {
     const result = resolveThread(
       incoming({ inReplyTo: "<unknown@x>" }),
-      candidates({ byMessageId: [{ messageId: "<other@x>", threadId: "T7" }] }),
+      candidates({ byMessageId: [{ messageId: "<other@x>", threadId: "T7", participants: ["a@x.test"] }] }),
     );
     expect(result).toEqual({ action: "create" });
   });

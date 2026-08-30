@@ -1,9 +1,11 @@
 import { composeAction } from "@/app/(mail)/actions";
 import { listInboxes } from "@/lib/mail/queries";
+import { requireUser } from "@/lib/auth/require";
 
 export const dynamic = "force-dynamic";
 
 export default async function ComposePage() {
+  await requireUser();
   const { pinned } = await listInboxes();
   const sendable = pinned.length > 0 ? pinned : [{ address: "", label: null, unread: 0 }];
 
