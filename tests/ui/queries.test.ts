@@ -7,6 +7,7 @@ import {
   listThreads,
   loadThread,
   markThreadRead,
+  registerAccount,
 } from "../../src/lib/mail/queries";
 
 async function seedThread(opts: {
@@ -102,6 +103,25 @@ describe("listInboxes", () => {
     const { pinned, otherCount } = await listInboxes();
     expect(pinned).toHaveLength(0);
     expect(otherCount).toBe(0);
+  });
+});
+
+describe("registerAccount", () => {
+  it("pins an address that never received mail", async () => {
+    await registerAccount("me@x.test");
+
+    const { pinned } = await listInboxes();
+    expect(pinned.map((p) => p.address)).toEqual(["me@x.test"]);
+  });
+
+  it("pins an address that already exists without erasing its history", async () => {
+    await seedThread({ subject: "a", at: "2026-09-01", deliveredTo: "hi@x.test", unread: true });
+
+    await registerAccount("hi@x.test");
+
+    const { pinned } = await listInboxes();
+    expect(pinned.map((p) => p.address)).toEqual(["hi@x.test"]);
+    expect(pinned[0].unread).toBe(1);
   });
 });
 
