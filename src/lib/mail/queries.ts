@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, attachments, messages, threads } from "../db/schema";
 
@@ -15,8 +15,13 @@ export interface ThreadSummary {
   hasAttachment: boolean;
 }
 
+// Outbound messages hold their full content the moment they are sent, so
+// "pending" on one only means Resend has not confirmed the id yet. Inbound
+// stays gated on "complete", which is when it has been fetched.
+const visible = or(eq(messages.status, "complete"), eq(messages.direction, "outbound"));
+
 export async function listThreads(opts: { address?: string; search?: string }) {
-  const where = [eq(messages.status, "complete")];
+  const where = [visible];
   if (opts.address) where.push(eq(messages.deliveredTo, opts.address));
   if (opts.search) {
     where.push(sql`${messages.search} @@ plainto_tsquery('english', ${opts.search})`);
@@ -103,7 +108,7 @@ export async function loadThread(threadId: string) {
   const rows = await db
     .select()
     .from(messages)
-    .where(and(eq(messages.threadId, threadId), eq(messages.status, "complete")))
+    .where(and(eq(messages.threadId, threadId), visible))
     .orderBy(asc(messages.receivedAt));
 
   const files = await db
