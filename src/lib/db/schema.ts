@@ -95,6 +95,23 @@ export const addresses = pgTable("addresses", {
   // guess, so the sidebar lists pinned addresses and collapses the rest.
   pinned: boolean("pinned").notNull().default(false),
   hidden: boolean("hidden").notNull().default(false),
+  // Identity carried on mail sent from this address.
+  displayName: text("display_name"),
+  replyTo: text("reply_to"),
+  // Hue for the address dot, so a colour survives a restart.
+  hue: integer("hue"),
+  autoArchive: boolean("auto_archive").notNull().default(false),
+});
+
+// A draft belongs to a thread when it is a reply, and stands alone otherwise.
+export const drafts = pgTable("drafts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  threadId: uuid("thread_id").references(() => threads.id, { onDelete: "cascade" }),
+  fromAddress: text("from_address").notNull().default(""),
+  to: text("to").notNull().default(""),
+  subject: text("subject").notNull().default(""),
+  body: text("body").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const users = pgTable("users", {

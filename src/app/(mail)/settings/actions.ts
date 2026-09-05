@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth/require";
 import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
+import { updateAddress, type AddressPatch } from "@/lib/mail/addresses";
 import { registerAccount } from "@/lib/mail/queries";
 
 export async function addAccount(address: string) {
@@ -42,4 +43,11 @@ export async function signOut() {
 
   (await cookies()).delete(SESSION_COOKIE);
   redirect("/login");
+}
+
+export async function saveAddress(address: string, patch: AddressPatch) {
+  await requireUser();
+
+  await updateAddress(address, patch);
+  revalidatePath("/", "layout");
 }

@@ -1,79 +1,59 @@
-import Link from "next/link";
-import { ChevronIcon, EnvelopeIcon, PenIcon } from "@/components/icons";
+import { ComposeProvider } from "@/components/mail/Compose";
+import { MobileBar } from "@/components/mail/MobileBar";
+import { PaneToolbar } from "@/components/mail/PaneToolbar";
+import { Rail } from "@/components/mail/Rail";
+import { SearchProvider } from "@/components/mail/SearchField";
+import { ShellFrame } from "@/components/mail/ShellFrame";
 import { requireUser } from "@/lib/auth/require";
+import { findUser } from "@/lib/auth/users";
 import { listInboxes } from "@/lib/mail/queries";
 
-export const dynamic = "force-dynamic";
+const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
-export default async function MailLayout({ children }: { children: React.ReactNode }) {
-  await requireUser();
-  const { pinned, otherCount, unread } = await listInboxes();
+export default async function MailLayout({
+  children,
+  list,
+}: {
+  children: React.ReactNode;
+  list: React.ReactNode;
+}) {
+  const userId = await requireUser();
+  const [rail, user] = await Promise.all([listInboxes(), findUser(userId)]);
+
+  const accounts = rail.named.map((inbox) => inbox.address);
 
   return (
-    <div className="grid h-dvh grid-cols-[196px_1fr]">
-      <aside className="flex flex-col border-r border-rule bg-panel">
-        <div className="flex h-11 items-center gap-2 border-b border-rule px-3.5 text-[13px] font-semibold tracking-[-0.01em]">
-          <EnvelopeIcon className="text-accent" />
-          Mailroom
-        </div>
+    <ShellFrame>
+      {/* Two soft glows sit behind the glass panels and never take pointer events. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -left-24 h-[520px] w-[760px] rounded-full blur-[120px]"
+        style={{ background: "var(--glow-a)" }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-32 -bottom-40 h-[520px] w-[640px] rounded-full blur-[130px]"
+        style={{ background: "var(--glow-b)" }}
+      />
 
-        <nav className="flex flex-col gap-0.5 p-2">
-          <Link
-            href="/compose"
-            className="mt-0.5 mb-2.5 flex h-[30px] items-center justify-center gap-1.5 rounded-md bg-accent text-[13px] font-semibold text-accent-ink"
-          >
-            <PenIcon />
-            Compose
-          </Link>
+      <SearchProvider>
+        {/* The composer sits at frame level rather than inside the pane, so it
+            can still open from the phone inbox where the pane is off screen. */}
+        <ComposeProvider accounts={accounts}>
+          <MobileBar defaultFrom={accounts[0] ?? ""} />
 
-          <InboxLink href="/" label="All mail" count={unread} />
+          <Rail {...rail} user={user?.email ?? ""} loadedAt={clock.format(new Date())} />
 
-          <div className="px-2 pt-2 pb-1.5 text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">
-            Inboxes
+          <div data-slot="list" className="flex min-w-0 flex-none max-md:min-h-0 max-md:flex-1">
+            {list}
           </div>
 
-          {pinned.map((inbox) => (
-            <InboxLink
-              key={inbox.address}
-              href={`/?address=${encodeURIComponent(inbox.address)}`}
-              label={inbox.label ?? inbox.address.split("@")[0] + "@"}
-              count={inbox.unread}
-            />
-          ))}
-
-          <Link
-            href="/settings"
-            className="mt-1 flex h-7 items-center rounded-md px-2 text-[13px] text-ink-3 transition-colors hover:bg-hover"
-          >
-            Settings
-          </Link>
-
-          {otherCount > 0 && (
-            <Link
-              href="/?all=1"
-              className="mt-1 flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-ink-3 transition-colors hover:bg-hover"
-            >
-              <ChevronIcon className="opacity-75" />
-              More
-              <span className="ml-auto font-mono text-[11px]">{otherCount}</span>
-            </Link>
-          )}
-        </nav>
-      </aside>
-
-      <main className="flex min-w-0 flex-col">{children}</main>
-    </div>
-  );
-}
-
-function InboxLink({ href, label, count }: { href: string; label: string; count: number }) {
-  return (
-    <Link
-      href={href}
-      className="flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-ink-2 transition-colors hover:bg-hover"
-    >
-      {label}
-      {count > 0 && <span className="ml-auto font-mono text-[11px] text-ink-3">{count}</span>}
-    </Link>
+          <main data-slot="pane" className="relative flex min-w-0 flex-1 flex-col max-md:min-h-0">
+            <PaneToolbar defaultFrom={accounts[0] ?? ""} />
+            {children}
+          </main>
+        </ComposeProvider>
+      </SearchProvider>
+    </ShellFrame>
   );
 }

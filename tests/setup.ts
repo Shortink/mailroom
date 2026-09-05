@@ -7,7 +7,7 @@ import { db } from "../src/lib/db/client";
 beforeAll(async () => {
   await db.execute(sql`
     truncate table
-      messages, threads, attachments, addresses,
+      messages, threads, attachments, addresses, drafts,
       users, recovery_codes, invites, login_attempts
     restart identity cascade
   `);

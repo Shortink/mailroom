@@ -15,7 +15,7 @@ export function SetupForm() {
         error={state?.error}
       >
         <Field label="Setup token" name="token" mono />
-        <p className="mb-3 -mt-1.5 text-[11px] text-ink-3">Printed in the server logs at startup.</p>
+        <p className="mb-3 -mt-1.5 text-[11px] text-ink3">Printed in the server logs at startup.</p>
         <Field label="Email" name="email" type="email" autoComplete="username" />
         <Field label="Password" name="password" type="password" autoComplete="new-password" />
         <SubmitButton>Create account</SubmitButton>

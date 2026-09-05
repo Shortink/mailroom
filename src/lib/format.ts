@@ -18,3 +18,22 @@ export function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+const stamp = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+// Message headers carry the full day and time, unlike the list's relative form.
+export function formatStamp(value: Date) {
+  return stamp.format(value);
+}
+
+// Body text shown under a subject line: one line, no run-on whitespace.
+export function snippet(text: string | null, max = 120) {
+  if (!text) return "";
+
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? flat.slice(0, max) + "…" : flat;
+}

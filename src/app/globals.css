@@ -1,52 +1,94 @@
 @import "tailwindcss";
 
+/* Every colour derives from one accent hue, with a second hue for the glow.
+   Change --h and the whole interface follows. */
 :root {
-  --bg: #ffffff;
-  --panel: #fafafa;
-  --hover: #f4f4f5;
-  --well: #f7f7f8;
-  --rule: #e8e8eb;
-  --ink: #18181b;
-  --ink-2: #52525b;
-  --ink-3: #71717a;
-  --accent: #2f7d4f;
-  --accent-ink: #ffffff;
-  --sel: #ecf3ef;
+  --h: 258;
+  --h2: 212;
+
+  --bg: oklch(0.986 0.004 var(--h));
+  --rail: oklch(0.958 0.009 var(--h) / 0.94);
+  --panel: oklch(1 0 0 / 0.88);
+  --panel2: oklch(1 0 0 / 0.98);
+  --line: oklch(0.42 0.03 var(--h) / 0.16);
+  --line2: oklch(0.42 0.03 var(--h) / 0.09);
+  --ink: oklch(0.25 0.022 var(--h));
+  --ink2: oklch(0.42 0.02 var(--h));
+  --ink3: oklch(0.54 0.02 var(--h));
+  --chip: oklch(0.45 0.03 var(--h) / 0.055);
+  --hover: oklch(0.6 0.15 var(--h) / 0.07);
+  --accent: oklch(0.55 0.17 var(--h));
+  --accent-soft: oklch(0.62 0.16 var(--h) / 0.14);
+  --btn: linear-gradient(180deg, oklch(0.62 0.17 var(--h)), oklch(0.53 0.17 var(--h)));
+  --btn-ink: oklch(0.99 0.01 var(--h));
+  --btn-shadow: 0 8px 20px -12px oklch(0.55 0.17 var(--h) / 0.65);
+  --brand: linear-gradient(135deg, oklch(0.66 0.16 var(--h)), oklch(0.5 0.17 var(--h)));
+  --glow-a: oklch(0.94 0.045 var(--h) / 0.85);
+  --glow-b: oklch(0.955 0.035 var(--h2) / 0.85);
+
+  --window-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.55);
+  --dialog-shadow: 0 34px 70px -24px rgb(0 0 0 / 0.65);
+  --composer-shadow: 0 -20px 50px -22px rgb(0 0 0 / 0.6);
+  --toast-shadow: 0 22px 46px -20px rgb(0 0 0 / 0.6);
+
+  --ok: oklch(0.72 0.14 146);
+  --warn: oklch(0.78 0.13 88);
+  --err: oklch(0.68 0.16 18);
+
   color-scheme: light;
 }
 
+/* Authored for dark, not inverted. Chroma on the accent drops so glass
+   surfaces do not bloom against the dark ground. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0a0a0c;
-    --panel: #101012;
-    --hover: #18181b;
-    --well: #141416;
-    --rule: #242427;
-    --ink: #fafafa;
-    --ink-2: #a1a1aa;
-    --ink-3: #7e7e88;
-    --accent: #42be65;
-    --accent-ink: #07160d;
-    --sel: #14241b;
+    --bg: oklch(0.17 0.014 var(--h));
+    --rail: oklch(0.145 0.014 var(--h) / 0.72);
+    --panel: oklch(0.19 0.014 var(--h) / 0.55);
+    --panel2: oklch(0.225 0.016 var(--h) / 0.92);
+    --line: oklch(1 0 0 / 0.08);
+    --line2: oklch(1 0 0 / 0.05);
+    --ink: oklch(0.97 0.005 var(--h));
+    --ink2: oklch(0.86 0.01 var(--h));
+    --ink3: oklch(0.65 0.02 var(--h));
+    --chip: oklch(1 0 0 / 0.06);
+    --hover: oklch(1 0 0 / 0.045);
+    --accent: oklch(0.72 0.105 var(--h));
+    --accent-soft: oklch(0.6 0.12 var(--h) / 0.2);
+    --btn: linear-gradient(180deg, oklch(0.62 0.13 var(--h)), oklch(0.53 0.13 var(--h)));
+    --btn-ink: oklch(0.99 0.01 var(--h));
+    --btn-shadow: 0 8px 22px -14px oklch(0.6 0.13 var(--h) / 0.7);
+    --brand: linear-gradient(135deg, oklch(0.72 0.11 var(--h)), oklch(0.56 0.13 var(--h)));
+    --glow-a: oklch(0.55 0.14 var(--h) / 0.22);
+    --glow-b: oklch(0.58 0.1 var(--h2) / 0.14);
+
+    --window-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.7);
+
     color-scheme: dark;
   }
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-rail: var(--rail);
   --color-panel: var(--panel);
-  --color-hover: var(--hover);
-  --color-well: var(--well);
-  --color-rule: var(--rule);
+  --color-panel2: var(--panel2);
+  --color-line: var(--line);
+  --color-line2: var(--line2);
   --color-ink: var(--ink);
-  --color-ink-2: var(--ink-2);
-  --color-ink-3: var(--ink-3);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-chip: var(--chip);
+  --color-hover: var(--hover);
   --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-sel: var(--sel);
+  --color-accent-soft: var(--accent-soft);
+  --color-btn-ink: var(--btn-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 body {
@@ -55,9 +97,8 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Surfaces the browser draws for us still belong to the design. */
 ::selection {
-  background: var(--sel);
+  background: var(--accent-soft);
   color: var(--ink);
 }
 
@@ -67,18 +108,92 @@ body {
   border-radius: 4px;
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--rule) transparent;
+/* Panels scroll without a visible track; the frame already bounds them. */
+.scroll-clean {
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+.scroll-clean::-webkit-scrollbar {
+  display: none;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--rule);
-  border-radius: 6px;
-  border: 3px solid var(--bg);
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+@keyframes dock-in {
+  from { opacity: 0; transform: translateY(16px); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.animate-fade-in { animation: fade-in 0.16s ease-out; }
+.animate-pop-in { animation: pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.animate-dock-in { animation: dock-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.animate-spin-slow { animation: spin 0.7s linear infinite; }
+
+.shimmer {
+  background: linear-gradient(90deg, var(--chip), var(--hover), var(--chip));
+  background-size: 200% 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-pop-in,
+  .animate-dock-in,
+  .animate-spin-slow,
+  .shimmer {
+    animation: none;
+  }
+}
+
+/* Phones show one column at a time: the list by default, the reading pane once
+   a thread, draft or settings page is open. The rail becomes a drawer. */
+@media (max-width: 767px) {
+  [data-shell] > aside {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 25;
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  [data-shell][data-rail="open"] > aside {
+    transform: none;
+    box-shadow: var(--dialog-shadow);
+  }
+
+  [data-shell][data-pane="open"] > [data-slot="list"] {
+    display: none;
+  }
+
+  [data-shell][data-pane="closed"] > [data-slot="pane"] {
+    display: none;
+  }
+
+  [data-shell] [data-slot="list"] > * {
+    width: 100%;
+    border-right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-shell] > aside {
+    transition: none;
+  }
 }

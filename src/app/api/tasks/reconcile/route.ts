@@ -3,6 +3,7 @@ import { and, eq, lt } from "drizzle-orm";
 import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { messages } from "@/lib/db/schema";
+import { archiveStaleThreads } from "@/lib/mail/addresses";
 import { completeIngest } from "@/lib/mail/ingest";
 import { captureMessageId } from "@/lib/mail/send";
 
@@ -44,5 +45,7 @@ export async function POST(request: Request) {
     }
   }
 
-  return Response.json({ found: stale.length, retried });
+  const archived = await archiveStaleThreads();
+
+  return Response.json({ found: stale.length, retried, archived });
 }

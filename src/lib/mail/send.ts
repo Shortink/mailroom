@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, messages, threads } from "../db/schema";
+import { sendingIdentity } from "./addresses";
 import { getEmail, sendEmail } from "./resend";
 
 const MAX_ATTEMPTS = 5;
@@ -61,11 +62,14 @@ async function deliver(
   headers: Record<string, string>,
   thread: { threadId: string; inReplyTo: string | null; references: string[] },
 ) {
+  const identity = await sendingIdentity(input.from);
+
   const sent = await sendEmail({
-    from: input.from,
+    from: identity.from,
     to: input.to,
     subject: input.subject,
     text: input.text,
+    replyTo: identity.replyTo,
     headers,
   });
 
