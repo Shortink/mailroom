@@ -53,7 +53,7 @@ export function parseConfig(rawEnv: Record<string, unknown>) {
   return {
     ...parsedBase.data,
     requireTotp: parsedBase.data.REQUIRE_TOTP === "true",
-    storage: { driver: parsedStorage.data.STORAGE_DRIVER, ...parsedStorage.data },
+    storage: parsedStorage.data,
   };
 }
 
