@@ -9,3 +9,7 @@ next-env.d.ts
 .DS_Store
 coverage/
 /storage/
+
+# Playwright
+test-results/
+playwright-report/
