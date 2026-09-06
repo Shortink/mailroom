@@ -58,11 +58,22 @@ export async function completeIngest(messageId: string) {
       })
       .where(eq(messages.id, messageId));
 
+    // Deleting the placeholder cascades to its messages, so it can only go
+    // once this message points at the surviving thread.
+    if (threadId !== row.threadId) {
+      await db.delete(threads).where(eq(threads.id, row.threadId));
+    }
+
     await storeAttachments(messageId, row.resendId, mail.attachments ?? []);
 
     if (deliveredTo) {
       await db.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
     }
+
+    const [thread] = await db
+      .select({ participants: threads.participants })
+      .from(threads)
+      .where(eq(threads.id, threadId));
 
     await db
       .update(threads)
@@ -70,7 +81,7 @@ export async function completeIngest(messageId: string) {
         subject,
         lastMessageAt: new Date(),
         messageCount: sql`${threads.messageCount} + 1`,
-        participants: sql`(select array_agg(distinct p) from unnest(${threads.participants} || ${participants}::text[]) as p)`,
+        participants: [...new Set([...(thread?.participants ?? []), ...participants])],
       })
       .where(eq(threads.id, threadId));
   } catch (error) {
@@ -129,7 +140,6 @@ async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId
     await db.delete(threads).where(inArray(threads.id, decision.absorb));
   }
 
-  await db.delete(threads).where(eq(threads.id, placeholderThreadId));
   return decision.threadId;
 }
 
