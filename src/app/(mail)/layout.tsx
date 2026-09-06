@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ChevronIcon, EnvelopeIcon, PenIcon } from "@/components/icons";
+import { requireUser } from "@/lib/auth/require";
 import { listInboxes } from "@/lib/mail/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function MailLayout({ children }: { children: React.ReactNode }) {
+  await requireUser();
   const { pinned, otherCount, unread } = await listInboxes();
 
   return (

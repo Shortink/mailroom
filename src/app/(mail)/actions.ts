@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { requireUser } from "@/lib/auth/require";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
 
 function read(form: FormData, field: string) {
@@ -10,6 +11,8 @@ function read(form: FormData, field: string) {
 }
 
 export async function replyAction(formData: FormData) {
+  await requireUser();
+
   const threadId = read(formData, "threadId");
   const text = read(formData, "text");
   if (!text) return;
@@ -30,6 +33,8 @@ export async function replyAction(formData: FormData) {
 }
 
 export async function composeAction(formData: FormData) {
+  await requireUser();
+
   const to = read(formData, "to").split(",").map((address) => address.trim()).filter(Boolean);
   const subject = read(formData, "subject");
   const text = read(formData, "text");
