@@ -10,13 +10,19 @@ export default async function BoxList({
   searchParams,
 }: {
   params: Promise<{ box: string }>;
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; before?: string }>;
 }) {
   const { box } = await params;
   if (box === "drafts") return <DraftListPane />;
 
   if (!BOXES.includes(box as Box)) notFound();
-  const { filter } = await searchParams;
+  const { filter, before } = await searchParams;
 
-  return <ThreadList box={box as Box} unreadOnly={filter === "unread"} />;
+  return (
+    <ThreadList
+      box={box as Box}
+      unreadOnly={filter === "unread"}
+      before={before ? new Date(before) : undefined}
+    />
+  );
 }

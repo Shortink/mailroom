@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, attachments, messages, threads } from "../db/schema";
 import { countDrafts } from "./drafts";
@@ -28,7 +28,17 @@ export interface ListOptions {
   address?: string;
   box?: Box;
   unreadOnly?: boolean;
+  limit?: number;
+  before?: Date;
 }
+
+export interface ThreadPage {
+  threads: ThreadSummary[];
+  // Pass back as `before` to get the next page; null when this is the last.
+  nextCursor: Date | null;
+}
+
+const PAGE_SIZE = 50;
 
 // In Sent the address identifying a thread is the one it was sent from, not
 // the one it was delivered to.
@@ -36,26 +46,45 @@ function addressMatch(box: Box, address: string) {
   return box === "sent" ? eq(messages.fromAddress, address) : eq(messages.deliveredTo, address);
 }
 
-export async function listThreads(opts: ListOptions) {
-  const box = opts.box ?? "inbox";
+// Which threads belong in this view, newest first, one page at a time. Kept
+// separate from the hydration below so that only the page being shown pays for
+// the joins and aggregates.
+async function pageOfThreads(opts: ListOptions, box: Box, limit: number) {
+  const where = [visible, eq(threads.archived, box === "archive")];
 
-  const where = [visible];
   if (box === "sent") where.push(eq(messages.direction, "outbound"));
   if (opts.address) where.push(addressMatch(box, opts.address));
+  if (opts.before) where.push(lt(threads.lastMessageAt, opts.before));
+  if (opts.unreadOnly) {
+    where.push(
+      sql`exists (
+        select 1 from ${messages} unread
+        where unread.thread_id = ${threads.id}
+          and unread.read_at is null
+          and unread.direction = 'inbound'
+      )`,
+    );
+  }
 
-  // A search matches one message, but a summary describes the whole thread, so
-  // the CTE narrows to matching threads and the outer query joins all of their
-  // messages back in.
-  const matched = db.$with("matched").as(
-    db
-      .select({ threadId: messages.threadId })
-      .from(messages)
-      .where(and(...where))
-      .groupBy(messages.threadId),
-  );
+  return db
+    .selectDistinct({ id: threads.id, lastMessageAt: threads.lastMessageAt })
+    .from(threads)
+    .innerJoin(messages, eq(messages.threadId, threads.id))
+    .where(and(...where))
+    .orderBy(desc(threads.lastMessageAt))
+    .limit(limit + 1);
+}
+
+export async function listThreads(opts: ListOptions): Promise<ThreadPage> {
+  const box = opts.box ?? "inbox";
+  const limit = opts.limit ?? PAGE_SIZE;
+
+  // One row over the limit shows whether another page exists.
+  const page = await pageOfThreads(opts, box, limit);
+  const wanted = page.slice(0, limit);
+  if (wanted.length === 0) return { threads: [], nextCursor: null };
 
   const rows = await db
-    .with(matched)
     .select({
       id: threads.id,
       subject: threads.subject,
@@ -70,15 +99,24 @@ export async function listThreads(opts: ListOptions) {
       hasAttachment: sql<boolean>`bool_or(${attachments.id} is not null)`,
     })
     .from(threads)
-    .innerJoin(matched, eq(matched.threadId, threads.id))
     .innerJoin(messages, eq(messages.threadId, threads.id))
     .leftJoin(attachments, eq(attachments.messageId, messages.id))
-    .where(eq(threads.archived, box === "archive"))
+    .where(
+      and(
+        visible,
+        inArray(
+          threads.id,
+          wanted.map((row) => row.id),
+        ),
+      ),
+    )
     .groupBy(threads.id)
     .orderBy(desc(threads.lastMessageAt));
 
-  const list = rows as ThreadSummary[];
-  return opts.unreadOnly ? list.filter((thread) => thread.unread > 0) : list;
+  return {
+    threads: rows as ThreadSummary[],
+    nextCursor: page.length > limit ? wanted[wanted.length - 1].lastMessageAt : null,
+  };
 }
 
 // Explicit account registration: same pinned flag receiving already sets, but
