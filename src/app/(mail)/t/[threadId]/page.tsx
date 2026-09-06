@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BackIcon, DocIcon } from "@/components/icons";
+import { Composer } from "@/components/Composer";
 import { MessageBody } from "@/components/MessageBody";
 import { formatSize, formatWhen } from "@/lib/format";
 import { loadThread, markThreadRead } from "@/lib/mail/queries";
@@ -27,6 +28,13 @@ export default async function ThreadPage({
   );
 
   const participants = [...new Set(thread.participants)].join(", ");
+
+  // Reply from the address the mail was delivered to, back to whoever last wrote.
+  const inbound = thread.messages.filter((message) => message.direction === "inbound");
+  const latest = inbound.at(-1) ?? thread.messages.at(-1);
+  const replyFrom = latest?.deliveredTo ?? "";
+  const replyTo = latest?.fromAddress ?? "";
+  const replySubject = thread.subject.startsWith("Re: ") ? thread.subject : `Re: ${thread.subject}`;
 
   return (
     <>
@@ -60,7 +68,7 @@ export default async function ThreadPage({
               <article key={message.id} className="border-b border-rule py-3.5">
                 <div className="mb-[7px] flex items-baseline gap-2">
                   <span className="text-[13px] font-semibold">
-                    {message.direction === "outbound" ? "You" : (message.fromAddress ?? "Unknown")}
+                    {message.direction === "outbound" ? "You" : (message.fromName ?? message.fromAddress ?? "Unknown")}
                   </span>
                   <span className="text-xs text-ink-3">
                     {message.direction === "outbound" ? message.fromAddress : message.deliveredTo}
@@ -89,6 +97,8 @@ export default async function ThreadPage({
             );
           })}
         </div>
+
+        <Composer threadId={thread.id} from={replyFrom} to={replyTo} subject={replySubject} />
       </div>
     </>
   );

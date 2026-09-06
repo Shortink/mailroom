@@ -8,6 +8,11 @@ vi.mock("../../src/lib/mail/ingest", () => ({
   completeIngest: (id: string) => completeIngest(id),
 }));
 
+const captureMessageId = vi.fn();
+vi.mock("../../src/lib/mail/send", () => ({
+  captureMessageId: (id: string) => captureMessageId(id),
+}));
+
 const { POST } = await import("../../src/app/api/tasks/reconcile/route");
 
 const STALE = new Date(Date.now() - 10 * 60 * 1000);
@@ -39,6 +44,8 @@ async function seed(rows: { resendId: string; attempts?: number; lastAttemptAt?:
 beforeEach(async () => {
   completeIngest.mockReset();
   completeIngest.mockResolvedValue(undefined);
+  captureMessageId.mockReset();
+  captureMessageId.mockResolvedValue(undefined);
   await db.execute(sql`truncate table messages, threads restart identity cascade`);
 });
 
@@ -92,5 +99,24 @@ describe("reconcile", () => {
 
     expect(completeIngest).toHaveBeenCalledTimes(2);
     expect(body).toEqual({ found: 2, retried: 1 });
+  });
+});
+
+describe("reconcile dispatch", () => {
+  it("captures message ids for outbound rows instead of re-ingesting them", async () => {
+    const stale = new Date(Date.now() - 10 * 60 * 1000);
+    const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
+    await db.insert(messages).values({
+      threadId: thread.id,
+      direction: "outbound",
+      status: "pending",
+      resendId: "out-1",
+      lastAttemptAt: stale,
+    });
+
+    await call(process.env.RECONCILE_TOKEN);
+
+    expect(captureMessageId).toHaveBeenCalledTimes(1);
+    expect(completeIngest).not.toHaveBeenCalled();
   });
 });

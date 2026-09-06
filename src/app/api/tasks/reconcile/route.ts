@@ -4,6 +4,7 @@ import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { messages } from "@/lib/db/schema";
 import { completeIngest } from "@/lib/mail/ingest";
+import { captureMessageId } from "@/lib/mail/send";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   if (!authorized(request)) return new Response("unauthorized", { status: 401 });
 
   const stale = await db
-    .select({ id: messages.id })
+    .select({ id: messages.id, direction: messages.direction })
     .from(messages)
     .where(
       and(
@@ -35,11 +36,11 @@ export async function POST(request: Request) {
   let retried = 0;
   for (const row of stale) {
     try {
-      await completeIngest(row.id);
+      await (row.direction === "outbound" ? captureMessageId(row.id) : completeIngest(row.id));
       retried += 1;
     } catch {
-      // completeIngest records the attempt and eventually marks the row failed;
-      // one bad message must not stop the sweep.
+      // The handlers record their own attempts and eventually mark the row
+      // failed; one bad message must not stop the sweep.
     }
   }
 
