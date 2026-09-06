@@ -1,10 +1,10 @@
-import { getConfig, type Config } from "../config";
+import { parseStorageConfig, type StorageConfig } from "../config";
 import { FsStorage } from "./fs";
 import { PostgresStorage } from "./postgres";
 import { S3Storage } from "./s3";
 import type { Storage } from "./types";
 
-export function createStorage(settings: Config["storage"]): Storage {
+export function createStorage(settings: StorageConfig): Storage {
   switch (settings.STORAGE_DRIVER) {
     case "fs":
       return new FsStorage(settings.FS_STORAGE_PATH);
@@ -26,6 +26,6 @@ export function createStorage(settings: Config["storage"]): Storage {
 let cached: Storage | undefined;
 
 export function getStorage() {
-  cached ??= createStorage(getConfig().storage);
+  cached ??= createStorage(parseStorageConfig(process.env));
   return cached;
 }

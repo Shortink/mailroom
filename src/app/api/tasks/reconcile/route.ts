@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { and, eq, lt } from "drizzle-orm";
-import { getConfig } from "@/lib/config";
+import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { messages } from "@/lib/db/schema";
 import { completeIngest } from "@/lib/mail/ingest";
@@ -14,7 +14,7 @@ function authorized(request: Request) {
   const presented = Buffer.from(
     request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "",
   );
-  const expected = Buffer.from(getConfig().RECONCILE_TOKEN);
+  const expected = Buffer.from(requireEnv("RECONCILE_TOKEN"));
   return presented.length === expected.length && timingSafeEqual(presented, expected);
 }
 

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { after } from "next/server";
 import { Webhook } from "svix";
-import { getConfig } from "@/lib/config";
+import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { messages, threads } from "@/lib/db/schema";
 import { completeIngest } from "@/lib/mail/ingest";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   let event: ReceivedEvent;
   try {
-    event = new Webhook(getConfig().RESEND_WEBHOOK_SECRET).verify(raw, {
+    event = new Webhook(requireEnv("RESEND_WEBHOOK_SECRET")).verify(raw, {
       "svix-id": request.headers.get("svix-id") ?? "",
       "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
       "svix-signature": request.headers.get("svix-signature") ?? "",

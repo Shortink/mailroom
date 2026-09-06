@@ -1,4 +1,4 @@
-import { getConfig } from "../config";
+import { requireEnv } from "../env";
 
 const API = "https://api.resend.com";
 
@@ -55,7 +55,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${getConfig().RESEND_API_KEY}`,
+      Authorization: `Bearer ${requireEnv("RESEND_API_KEY")}`,
       "Content-Type": "application/json",
       ...init?.headers,
     },

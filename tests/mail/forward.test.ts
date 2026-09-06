@@ -8,11 +8,6 @@ vi.mock("../../src/lib/mail/resend", () => ({
   sendEmail: (input: unknown) => sendEmail(input),
 }));
 
-const forwardTo = vi.fn(() => "phone@gmail.test");
-vi.mock("../../src/lib/config", () => ({
-  getConfig: () => ({ FORWARD_TO: forwardTo() }),
-}));
-
 const { forwardCopy } = await import("../../src/lib/mail/forward");
 
 async function seed(overrides: Record<string, unknown> = {}) {
@@ -36,7 +31,7 @@ async function seed(overrides: Record<string, unknown> = {}) {
 beforeEach(async () => {
   sendEmail.mockReset();
   sendEmail.mockResolvedValue({ id: "fwd-1" });
-  forwardTo.mockReturnValue("phone@gmail.test");
+  process.env.FORWARD_TO = "phone@gmail.test";
   await db.execute(sql`truncate table messages, threads restart identity cascade`);
 });
 
@@ -67,7 +62,7 @@ describe("forwardCopy", () => {
   });
 
   it("does nothing when no forwarding address is configured", async () => {
-    forwardTo.mockReturnValue(undefined as unknown as string);
+    delete process.env.FORWARD_TO;
     const row = await seed();
 
     await forwardCopy(row.id);

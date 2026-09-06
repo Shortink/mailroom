@@ -1,11 +1,11 @@
 import { eq } from "drizzle-orm";
-import { getConfig } from "../config";
+
 import { db } from "../db/client";
 import { messages } from "../db/schema";
 import { sendEmail } from "./resend";
 
 export async function forwardCopy(messageId: string) {
-  const forwardTo = getConfig().FORWARD_TO;
+  const forwardTo = process.env.FORWARD_TO;
   if (!forwardTo) return;
 
   const [row] = await db.select().from(messages).where(eq(messages.id, messageId));
