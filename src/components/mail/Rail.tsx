@@ -15,6 +15,9 @@ import { addressColor, initials, localPart } from "@/lib/mail/identity";
 import type { Inbox, Rail as RailData } from "@/lib/mail/queries";
 
 interface Props extends RailData {
+  // Messages ingest gave up on. They are invisible in the lists, so the only
+  // place they can be reported is here.
+  failed: number;
   user: string;
   loadedAt: string;
 }
@@ -26,6 +29,7 @@ export function Rail({
   sent,
   drafts,
   archived,
+  failed,
   user,
   loadedAt,
 }: Props) {
@@ -43,6 +47,24 @@ export function Rail({
           <span className="block font-mono text-[10px] text-ink3">self-hosted</span>
         </span>
       </header>
+
+      {failed > 0 && (
+        <div
+          className="rounded-[10px] border px-2.5 py-2"
+          style={{
+            background: "oklch(0.68 0.16 18 / 0.09)",
+            borderColor: "oklch(0.68 0.16 18 / 0.4)",
+          }}
+        >
+          <p className="text-[12.5px] font-medium">
+            {failed} {failed === 1 ? "message" : "messages"} not fetched
+          </p>
+          <p className="mt-0.5 font-mono text-[10px] leading-[1.5] text-ink3">
+            Resend took delivery but the content never arrived. Check the server
+            logs.
+          </p>
+        </div>
+      )}
 
       <nav className="flex flex-col gap-0.5">
         <BoxRow href="/" label="All mail" count={unread} active={path === "/"}>
