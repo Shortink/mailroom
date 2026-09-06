@@ -2,6 +2,7 @@ import { eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, attachments, messages, threads } from "../db/schema";
 import { getStorage } from "../storage";
+import { forwardCopy } from "./forward";
 import { downloadAttachment, getAttachment, getReceivedEmail } from "./resend";
 import { normalizeSubject, resolveThread, type Incoming } from "./threading";
 
@@ -84,6 +85,8 @@ export async function completeIngest(messageId: string) {
         participants: [...new Set([...(thread?.participants ?? []), ...participants])],
       })
       .where(eq(threads.id, threadId));
+
+    await forwardCopy(messageId);
   } catch (error) {
     if (row.attempts + 1 >= MAX_ATTEMPTS) {
       await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));

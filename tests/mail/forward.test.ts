@@ -1,0 +1,96 @@
+import { sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { db } from "../../src/lib/db/client";
+import { messages, threads } from "../../src/lib/db/schema";
+
+const sendEmail = vi.fn();
+vi.mock("../../src/lib/mail/resend", () => ({
+  sendEmail: (input: unknown) => sendEmail(input),
+}));
+
+const forwardTo = vi.fn(() => "phone@gmail.test");
+vi.mock("../../src/lib/config", () => ({
+  getConfig: () => ({ FORWARD_TO: forwardTo() }),
+}));
+
+const { forwardCopy } = await import("../../src/lib/mail/forward");
+
+async function seed(overrides: Record<string, unknown> = {}) {
+  const [thread] = await db.insert(threads).values({ subject: "Invoice" }).returning();
+  const [row] = await db
+    .insert(messages)
+    .values({
+      threadId: thread.id,
+      direction: "inbound",
+      status: "complete",
+      subject: "Invoice",
+      fromAddress: "billing@vendor.test",
+      deliveredTo: "hi@example.test",
+      textBody: "please pay",
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+beforeEach(async () => {
+  sendEmail.mockReset();
+  sendEmail.mockResolvedValue({ id: "fwd-1" });
+  forwardTo.mockReturnValue("phone@gmail.test");
+  await db.execute(sql`truncate table messages, threads restart identity cascade`);
+});
+
+describe("forwardCopy", () => {
+  it("sends to the configured inbox with the original sender and subject", async () => {
+    const row = await seed();
+    await forwardCopy(row.id);
+
+    const sent = sendEmail.mock.calls[0][0] as {
+      to: string[];
+      subject: string;
+      text: string;
+      headers: Record<string, string>;
+    };
+
+    expect(sent.to).toEqual(["phone@gmail.test"]);
+    expect(sent.subject).toContain("Invoice");
+    expect(sent.text).toContain("billing@vendor.test");
+    expect(sent.text).toContain("please pay");
+  });
+
+  it("marks the copy so it is not ingested again", async () => {
+    const row = await seed();
+    await forwardCopy(row.id);
+
+    const sent = sendEmail.mock.calls[0][0] as { headers: Record<string, string> };
+    expect(sent.headers["X-Forwarded-By"]).toBe("resend-mail-client");
+  });
+
+  it("does nothing when no forwarding address is configured", async () => {
+    forwardTo.mockReturnValue(undefined as unknown as string);
+    const row = await seed();
+
+    await forwardCopy(row.id);
+
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("swallows send failures so ingest still succeeds", async () => {
+    sendEmail.mockRejectedValue(new Error("boom"));
+    const row = await seed();
+
+    await expect(forwardCopy(row.id)).resolves.toBeUndefined();
+  });
+
+  it("ignores an unknown message id", async () => {
+    await expect(forwardCopy("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("forwards outbound mail too, so the phone sees whole conversations", async () => {
+    const row = await seed({ direction: "outbound", fromAddress: "hi@example.test" });
+    await forwardCopy(row.id);
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+});
