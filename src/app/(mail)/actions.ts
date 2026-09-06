@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth/require";
 import { deleteDraft, saveDraft, type DraftInput } from "@/lib/mail/drafts";
+import { retryFailed } from "@/lib/mail/reconcile";
 import { outgoing } from "@/lib/mail/limits";
 import {
   markThreadRead,
@@ -114,4 +115,12 @@ export async function markRead(threadId: string) {
 
   await markThreadRead(threadId);
   revalidatePath("/", "layout");
+}
+
+export async function retryFailedMail() {
+  await requireUser();
+
+  const result = await retryFailed();
+  revalidatePath("/", "layout");
+  return result;
 }
