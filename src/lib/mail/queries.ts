@@ -62,6 +62,15 @@ export async function listThreads(opts: { address?: string; search?: string }) {
   return rows as ThreadSummary[];
 }
 
+// Explicit account registration: same pinned flag receiving already sets, but
+// callable before any mail exists so an address can send immediately.
+export async function registerAccount(address: string) {
+  await db
+    .insert(addresses)
+    .values({ address, pinned: true })
+    .onConflictDoUpdate({ target: addresses.address, set: { pinned: true } });
+}
+
 export interface Inbox {
   address: string;
   label: string | null;

@@ -3,11 +3,26 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { record } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/require";
 import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
+import { registerAccount } from "@/lib/mail/queries";
+
+export async function addAccount(address: string) {
+  await requireUser();
+
+  const parsed = z.email().safeParse(address.trim().toLowerCase());
+  if (!parsed.success) return { error: "Enter a valid email address." };
+
+  await registerAccount(parsed.data);
+  revalidatePath("/settings");
+  revalidatePath("/");
+  revalidatePath("/compose");
+  return { error: null };
+}
 
 export async function issueInvite() {
   const userId = await requireUser();
