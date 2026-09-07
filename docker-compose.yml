@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mailroom}
+      POSTGRES_DB: mailroom
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-mailroom}@db:5432/mailroom
+      STORAGE_DRIVER: fs
+      FS_STORAGE_PATH: /data/attachments
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - attachments:/data/attachments
+
+volumes:
+  dbdata:
+  attachments:
