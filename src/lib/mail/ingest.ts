@@ -4,6 +4,7 @@ import { addresses, attachments, messages, threads } from "../db/schema";
 import { getStorage } from "../storage";
 import { forwardCopy } from "./forward";
 import { downloadAttachment, getAttachment, getReceivedEmail } from "./resend";
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY } from "./limits";
 import { normalizeSubject, resolveThread, type Incoming } from "./threading";
 
 const MAX_ATTEMPTS = 5;
@@ -47,8 +48,8 @@ export async function completeIngest(messageId: string) {
         fromAddress,
         to: mail.to ?? [],
         cc: mail.cc ?? [],
-        textBody: mail.text ?? null,
-        htmlBody: mail.html ?? null,
+        textBody: mail.text?.slice(0, MAX_BODY) ?? null,
+        htmlBody: mail.html?.slice(0, MAX_BODY) ?? null,
         headers,
         messageId: mail.message_id ?? headers["message-id"] ?? null,
         inReplyTo,
@@ -104,11 +105,17 @@ async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId
 
   const byMessageId = referenced.length
     ? ((await db
-        .select({ messageId: messages.messageId, threadId: messages.threadId })
+        .select({
+          messageId: messages.messageId,
+          threadId: messages.threadId,
+          participants: threads.participants,
+        })
         .from(messages)
+        .innerJoin(threads, eq(threads.id, messages.threadId))
         .where(inArray(messages.messageId, referenced))) as {
         messageId: string;
         threadId: string;
+        participants: string[];
       }[])
     : [];
 
@@ -169,7 +176,10 @@ async function storeAttachments(
 
   const storage = getStorage();
 
-  for (const item of listed) {
+  // Receiving is catch-all, so anyone can drive attachment storage. Bound both
+  // the count and the size rather than trusting what arrives.
+  for (const item of listed.slice(0, MAX_ATTACHMENTS)) {
+    if (item.size > MAX_ATTACHMENT_BYTES) continue;
     const key = `${messageId}/${item.id}`;
 
     await db

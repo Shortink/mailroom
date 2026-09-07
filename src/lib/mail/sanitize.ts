@@ -28,6 +28,22 @@ export function sanitizeEmailHtml(html: string, options: SanitizeOptions) {
       img: ["src", "alt", "width", "height"],
     },
     allowedSchemes: ["http", "https", "mailto"],
+    // Without an explicit allowlist sanitize-html passes every declaration
+    // through, so background:url() would fetch remotely and defeat the image
+    // blocking below. Nothing here accepts a url().
+    allowedStyles: {
+      "*": {
+        color: [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i, /^[a-z]+$/i],
+        "background-color": [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i, /^[a-z]+$/i],
+        "text-align": [/^(left|right|center|justify)$/],
+        "font-weight": [/^(bold|bolder|lighter|normal|[1-9]00)$/],
+        "font-style": [/^(italic|normal)$/],
+        "font-size": [/^\d+(\.\d+)?(px|em|rem|pt|%)$/],
+        "text-decoration": [/^(underline|line-through|none)$/],
+        padding: [/^[\d.\s]+(px|em|rem|%)?$/],
+        margin: [/^[\d.\s]+(px|em|rem|%)?$/],
+      },
+    },
     allowedSchemesByTag: { img: ["http", "https", "cid"] },
     transformTags: {
       a: (tagName, attribs) => ({

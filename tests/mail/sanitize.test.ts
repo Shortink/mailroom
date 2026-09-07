@@ -76,3 +76,34 @@ describe("sanitizeEmailHtml", () => {
     expect(clean("")).toBe("");
   });
 });
+
+describe("CSS cannot fetch remote resources", () => {
+  it("strips background:url() that would act as a tracking pixel", () => {
+    const out = clean(`<div style="background:url(https://tracker.test/p.gif)">hi</div>`);
+    expect(out).not.toContain("tracker.test");
+    expect(out).toContain("hi");
+  });
+
+  it("strips background-image, list-style-image, cursor and border-image urls", () => {
+    for (const css of [
+      "background-image:url(https://tracker.test/a.gif)",
+      "list-style-image:url(https://tracker.test/b.gif)",
+      "cursor:url(https://tracker.test/c.cur),auto",
+      "border-image:url(https://tracker.test/d.png)",
+    ]) {
+      expect(clean(`<div style="${css}">x</div>`)).not.toContain("tracker.test");
+    }
+  });
+
+  it("keeps harmless declarations", () => {
+    const out = clean(`<p style="color:#ff0000;font-weight:bold;text-align:center">x</p>`);
+    expect(out).toContain("color");
+    expect(out).toContain("bold");
+  });
+
+  it("strips a url() smuggled into an allowed property", () => {
+    expect(clean(`<div style="color:url(https://tracker.test/e.gif)">x</div>`)).not.toContain(
+      "tracker.test",
+    );
+  });
+});

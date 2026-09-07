@@ -57,8 +57,10 @@ describe("forwardCopy", () => {
     const row = await seed();
     await forwardCopy(row.id);
 
+    const { forwardMarker } = await import("../../src/lib/mail/marker");
     const sent = sendEmail.mock.calls[0][0] as { headers: Record<string, string> };
-    expect(sent.headers["X-Forwarded-By"]).toBe("resend-mail-client");
+    expect(sent.headers["X-Forwarded-By"]).toBe(forwardMarker());
+    expect(sent.headers["X-Forwarded-By"]).not.toBe("resend-mail-client");
   });
 
   it("does nothing when no forwarding address is configured", async () => {

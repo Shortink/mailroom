@@ -6,6 +6,7 @@ import { MessageBody } from "@/components/MessageBody";
 import { formatSize, formatWhen } from "@/lib/format";
 import { loadThread, markThreadRead } from "@/lib/mail/queries";
 import { getStorage } from "@/lib/storage";
+import { requireUser } from "@/lib/auth/require";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function ThreadPage({
 }: {
   params: Promise<{ threadId: string }>;
 }) {
+  await requireUser();
   const { threadId } = await params;
   const thread = await loadThread(threadId);
   if (!thread) notFound();

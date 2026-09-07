@@ -45,8 +45,21 @@ export async function acceptInvite(token: string, email: string, password: strin
     .where(eq(users.email, email.trim().toLowerCase()));
   if (existing) throw new Error("An account with that email already exists.");
 
-  const user = await createUser(email, password);
-  await db.update(invites).set({ acceptedAt: new Date() }).where(eq(invites.id, invite.id));
+  // Claim the invite before creating anything, so two concurrent submissions
+  // cannot both turn one token into an account.
+  const claimed = await db
+    .update(invites)
+    .set({ acceptedAt: new Date() })
+    .where(and(eq(invites.id, invite.id), isNull(invites.acceptedAt)))
+    .returning({ id: invites.id });
 
-  return user;
+  if (claimed.length === 0) throw new Error("That invite is no longer valid.");
+
+  try {
+    return await createUser(email, password);
+  } catch (error) {
+    // Hand the invite back if the account could not be created.
+    await db.update(invites).set({ acceptedAt: null }).where(eq(invites.id, invite.id));
+    throw error;
+  }
 }

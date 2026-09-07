@@ -25,13 +25,17 @@ export async function consumeRecoveryCode(userId: string, code: string) {
     .where(and(eq(recoveryCodes.userId, userId), isNull(recoveryCodes.usedAt)));
 
   for (const row of unused) {
-    if (await verifyPassword(row.codeHash, code)) {
-      await db
-        .update(recoveryCodes)
-        .set({ usedAt: new Date() })
-        .where(eq(recoveryCodes.id, row.id));
-      return true;
-    }
+    if (!(await verifyPassword(row.codeHash, code))) continue;
+
+    // Claiming in the WHERE clause means two concurrent submissions of the
+    // same code cannot both succeed.
+    const claimed = await db
+      .update(recoveryCodes)
+      .set({ usedAt: new Date() })
+      .where(and(eq(recoveryCodes.id, row.id), isNull(recoveryCodes.usedAt)))
+      .returning({ id: recoveryCodes.id });
+
+    if (claimed.length > 0) return true;
   }
 
   return false;

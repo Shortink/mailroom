@@ -4,26 +4,45 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth/require";
+import { outgoing } from "@/lib/mail/limits";
+import { listInboxes } from "@/lib/mail/queries";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
 
 function read(form: FormData, field: string) {
   return String(form.get(field) ?? "").trim();
 }
 
+function recipients(form: FormData) {
+  return read(form, "to")
+    .split(",")
+    .map((address) => address.trim())
+    .filter(Boolean);
+}
+
+// The sending address must be one this deployment owns, or the form
+// becomes a way to send as anybody the Resend account is allowed to use.
+async function validate(form: FormData) {
+  const parsed = outgoing.safeParse({
+    from: read(form, "from"),
+    to: recipients(form),
+    subject: read(form, "subject"),
+    text: read(form, "text"),
+  });
+  if (!parsed.success) return null;
+
+  const { pinned } = await listInboxes();
+  const owned = pinned.some((inbox) => inbox.address === parsed.data.from);
+  return owned ? parsed.data : null;
+}
+
 export async function replyAction(formData: FormData) {
   await requireUser();
 
   const threadId = read(formData, "threadId");
-  const text = read(formData, "text");
-  if (!text) return;
+  const input = await validate(formData);
+  if (!input) return;
 
-  const messageId = await sendReply({
-    threadId,
-    from: read(formData, "from"),
-    to: read(formData, "to").split(",").map((address) => address.trim()).filter(Boolean),
-    subject: read(formData, "subject"),
-    text,
-  });
+  const messageId = await sendReply({ threadId, ...input });
 
   // Resend publishes the assigned id shortly after delivery; the reconcile
   // sweep is the fallback if this misses.
@@ -35,12 +54,10 @@ export async function replyAction(formData: FormData) {
 export async function composeAction(formData: FormData) {
   await requireUser();
 
-  const to = read(formData, "to").split(",").map((address) => address.trim()).filter(Boolean);
-  const subject = read(formData, "subject");
-  const text = read(formData, "text");
-  if (to.length === 0 || !text) return;
+  const input = await validate(formData);
+  if (!input) return;
 
-  const messageId = await sendNew({ from: read(formData, "from"), to, subject, text });
+  const messageId = await sendNew(input);
   after(() => captureMessageId(messageId));
 
   redirect("/");

@@ -5,6 +5,7 @@ import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { messages, threads } from "@/lib/db/schema";
 import { completeIngest } from "@/lib/mail/ingest";
+import { forwardMarker } from "@/lib/mail/marker";
 
 export const runtime = "nodejs";
 
@@ -23,22 +24,25 @@ interface ReceivedEvent {
 export async function POST(request: Request) {
   const raw = await request.text();
 
-  let event: ReceivedEvent;
   try {
-    event = new Webhook(requireEnv("RESEND_WEBHOOK_SECRET")).verify(raw, {
+    // verify() checks the signature and throws on failure without handing the
+    // payload back, so it is parsed separately below.
+    new Webhook(requireEnv("RESEND_WEBHOOK_SECRET")).verify(raw, {
       "svix-id": request.headers.get("svix-id") ?? "",
       "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
       "svix-signature": request.headers.get("svix-signature") ?? "",
-    }) as unknown as ReceivedEvent;
+    });
   } catch {
     return new Response("invalid signature", { status: 401 });
   }
+
+  const event = JSON.parse(raw) as ReceivedEvent;
 
   if (event.type !== "email.received") return new Response("ignored", { status: 200 });
 
   // Copies this app forwarded would otherwise loop back in when FORWARD_TO is
   // an address on the receiving domain.
-  if (event.data.headers?.["x-forwarded-by"]) {
+  if (event.data.headers?.["x-forwarded-by"] === forwardMarker()) {
     return new Response("ignored", { status: 200 });
   }
 

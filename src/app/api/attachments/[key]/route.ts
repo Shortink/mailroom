@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { attachments } from "@/lib/db/schema";
+import { requireUser } from "@/lib/auth/require";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -17,6 +18,8 @@ const INLINE_TYPES = new Set([
 ]);
 
 export async function GET(_: Request, { params }: { params: Promise<{ key: string }> }) {
+  await requireUser();
+
   const { key } = await params;
   const storageKey = decodeURIComponent(key);
 

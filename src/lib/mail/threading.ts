@@ -16,7 +16,7 @@ export interface Incoming {
 }
 
 export interface Candidates {
-  byMessageId: { messageId: string; threadId: string }[];
+  byMessageId: { messageId: string; threadId: string; participants: string[] }[];
   bySubject: { threadId: string; participants: string[]; lastMessageAt: Date }[];
 }
 
@@ -34,10 +34,20 @@ export function resolveThread(
     [incoming.inReplyTo, ...incoming.references].filter((id): id is string => Boolean(id)),
   );
 
+  // A Message-ID is not a secret: it travels in every forwarded copy and every
+  // bounce. Requiring a shared participant stops anyone who has seen one from
+  // planting a message in that thread or forcing two threads to merge.
   const threadIds = [
     ...new Set(
       candidates.byMessageId
         .filter((candidate) => referenced.has(candidate.messageId))
+        .filter(
+          (candidate) =>
+            candidate.participants.length === 0 ||
+            candidate.participants.some((participant) =>
+              incoming.participants.includes(participant),
+            ),
+        )
         .map((candidate) => candidate.threadId),
     ),
   ];

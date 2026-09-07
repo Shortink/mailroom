@@ -6,6 +6,7 @@ import { loginAttempts, recoveryCodes, users } from "../../src/lib/db/schema";
 import { hashPassword, verifyPassword } from "../../src/lib/auth/password";
 import { readSession, signSession } from "../../src/lib/auth/session";
 import { confirmEnrolment, startEnrolment, verifyCode } from "../../src/lib/auth/totp";
+import { revokeSessions } from "../../src/lib/auth/revoke";
 import { consumeRecoveryCode, issueRecoveryCodes } from "../../src/lib/auth/recovery";
 import { recordAttempt, tooManyAttempts } from "../../src/lib/auth/rateLimit";
 
@@ -44,7 +45,7 @@ describe("password", () => {
 describe("session", () => {
   it("round-trips a user id", async () => {
     const token = await signSession("user-1", "full");
-    expect(await readSession(token)).toEqual({ sub: "user-1", stage: "full" });
+    expect(await readSession(token)).toEqual({ sub: "user-1", stage: "full", version: 0 });
   });
 
   it("rejects a tampered token", async () => {
@@ -156,5 +157,39 @@ describe("rate limiting", () => {
       .set({ attemptedAt: new Date(Date.now() - 60 * 60 * 1000) });
 
     expect(await tooManyAttempts("a@example.test", "1.1.1.1")).toBe(false);
+  });
+});
+
+describe("totp re-enrolment is refused once confirmed", () => {
+  it("will not overwrite a confirmed secret", async () => {
+    const user = await makeUser();
+    const { secret } = await startEnrolment(user.id);
+    await confirmEnrolment(user.id, new TOTP({ secret }).generate());
+
+    await expect(startEnrolment(user.id)).rejects.toThrow(/already/i);
+
+    // The original factor still works, so the owner is not locked out.
+    expect(await verifyCode(user.id, new TOTP({ secret }).generate())).toBe(true);
+  });
+
+  it("still allows a first enrolment", async () => {
+    const user = await makeUser();
+    await expect(startEnrolment(user.id)).resolves.toHaveProperty("secret");
+  });
+
+  it("allows re-enrolment while the first attempt is unconfirmed", async () => {
+    const user = await makeUser();
+    await startEnrolment(user.id);
+    await expect(startEnrolment(user.id)).resolves.toHaveProperty("secret");
+  });
+});
+
+describe("session versioning", () => {
+  it("stops verifying a token signed against an older version", async () => {
+    const token = await signSession("user-1", "full", 0);
+    expect((await readSession(token))?.version).toBe(0);
+
+    const bumped = await signSession("user-1", "full", 1);
+    expect((await readSession(bumped))?.version).toBe(1);
   });
 });

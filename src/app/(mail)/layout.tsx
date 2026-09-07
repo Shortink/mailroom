@@ -41,6 +41,13 @@ export default async function MailLayout({ children }: { children: React.ReactNo
             />
           ))}
 
+          <Link
+            href="/settings"
+            className="mt-1 flex h-7 items-center rounded-md px-2 text-[13px] text-ink-3 transition-colors hover:bg-hover"
+          >
+            Settings
+          </Link>
+
           {otherCount > 0 && (
             <Link
               href="/?all=1"
