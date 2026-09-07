@@ -12,7 +12,11 @@ import { SESSION_COOKIE, cookieOptions, readSession, signSession } from "@/lib/a
 import { AlreadyEnrolled, confirmEnrolment, startEnrolment, verifyCode } from "@/lib/auth/totp";
 import { record } from "@/lib/auth/audit";
 import { currentVersion, revokeSessions } from "@/lib/auth/revoke";
-import { issueRecoveryCodes } from "@/lib/auth/recovery";
+import {
+  RECOVERY_COOKIE,
+  issueRecoveryCodes,
+  recoveryCookieOptions,
+} from "@/lib/auth/recovery";
 
 // Verifying a throwaway hash keeps the timing of an unknown email the same as
 // a wrong password, so the form cannot be used to enumerate accounts.
@@ -136,11 +140,15 @@ export async function completeEnrolment(_: unknown, formData: FormData) {
 
   // Enrolling a factor ends every session issued before it.
   const version = await revokeSessions(session.sub);
-  (await cookies()).set(
+  const jar = await cookies();
+  jar.set(
     SESSION_COOKIE,
     await signSession(session.sub, "full", version),
     cookieOptions("full"),
   );
 
-  return { codes };
+  // Confirming re-renders the enrolment route, which by then sees a confirmed
+  // factor and redirects, so a returned value would never be drawn.
+  jar.set(RECOVERY_COOKIE, codes.join(","), recoveryCookieOptions());
+  redirect("/login/recovery");
 }
