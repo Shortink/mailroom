@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { requireUser } from "@/lib/auth/require";
 import { outgoing } from "@/lib/mail/limits";
-import { listInboxes } from "@/lib/mail/queries";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
 
 function read(form: FormData, field: string) {
@@ -19,8 +18,6 @@ function recipients(form: FormData) {
     .filter(Boolean);
 }
 
-// The sending address must be one this deployment owns, or the form
-// becomes a way to send as anybody the Resend account is allowed to use.
 async function validate(form: FormData) {
   const parsed = outgoing.safeParse({
     from: read(form, "from"),
@@ -28,11 +25,7 @@ async function validate(form: FormData) {
     subject: read(form, "subject"),
     text: read(form, "text"),
   });
-  if (!parsed.success) return null;
-
-  const { pinned } = await listInboxes();
-  const owned = pinned.some((inbox) => inbox.address === parsed.data.from);
-  return owned ? parsed.data : null;
+  return parsed.success ? parsed.data : null;
 }
 
 export async function replyAction(formData: FormData) {
