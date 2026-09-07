@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ClipIcon, DocIcon } from "@/components/icons";
+import { textIsEnough } from "@/lib/mail/body";
 
 export interface ThreadMessage {
   id: string;
@@ -102,7 +103,7 @@ function Avatar({ initials, size }: { initials: string; size: number }) {
 }
 
 function Body({ html, text }: { html: string | null; text: string | null }) {
-  if (!html) {
+  if (!html || textIsEnough(html, text)) {
     return (
       <pre className="max-w-[680px] font-sans text-[14.5px] leading-[1.75] whitespace-pre-wrap text-ink2">
         {text}
