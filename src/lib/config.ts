@@ -1,11 +1,11 @@
 import { z } from "zod";
 
+// What the app needs before it can serve a request. The Resend key, webhook
+// secret and reconcile token are checked where they are used instead: the
+// webhook secret only exists once the app is running and the webhook is made.
 const base = z.object({
   DATABASE_URL: z.string().min(1),
-  RESEND_API_KEY: z.string().min(1),
-  RESEND_WEBHOOK_SECRET: z.string().min(1),
   SESSION_SECRET: z.string().min(32),
-  RECONCILE_TOKEN: z.string().min(32),
   APP_URL: z.url(),
   FORWARD_TO: z.email().optional(),
   REQUIRE_TOTP: z.enum(["true", "false"]).default("true"),

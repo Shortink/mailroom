@@ -1,5 +1,6 @@
 import { setupAvailable } from "./lib/auth/setup";
 import { setupToken } from "./lib/auth/setupToken";
+import { getConfig } from "./lib/config";
 import { reconcile } from "./lib/mail/reconcile";
 
 // How often the sweep looks. What it picks up is decided by the claim window,
@@ -17,6 +18,17 @@ async function announceSetup() {
   }
 }
 
+// Checked at boot rather than at first use, so a missing secret stops the app
+// with a clear message instead of a 500 part way through a request.
+function checkConfig() {
+  try {
+    getConfig();
+  } catch (error) {
+    console.error(`\n${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  }
+}
+
 async function sweep() {
   try {
     await reconcile();
@@ -25,6 +37,7 @@ async function sweep() {
   }
 }
 
+checkConfig();
 await announceSetup();
 
 // Unreffed, so it never holds the process open by itself. A serverless process
