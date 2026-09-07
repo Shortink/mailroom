@@ -11,8 +11,10 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // Next injects inline bootstrap styles and scripts.
-      "script-src 'self' 'unsafe-inline'",
+      // Next injects inline bootstrap styles and scripts. React additionally
+      // needs eval to rebuild server callstacks, but only in development; the
+      // shipped policy must never carry unsafe-eval.
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
       // Message bodies render in a sandboxed iframe served from a blob/srcdoc.
