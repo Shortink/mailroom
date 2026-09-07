@@ -1,7 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, messages, threads } from "../db/schema";
-import { forwardCopy } from "./forward";
 import { getEmail, sendEmail } from "./resend";
 
 const MAX_ATTEMPTS = 5;
@@ -95,7 +94,6 @@ async function deliver(
     .values({ address: input.from, pinned: true })
     .onConflictDoUpdate({ target: addresses.address, set: { pinned: true } });
 
-  await forwardCopy(row.id);
   return row.id;
 }
 
