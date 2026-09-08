@@ -10,7 +10,8 @@
     "db:generate": "node --env-file-if-exists=.env node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "create-user": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs scripts/create-user.ts",
-    "seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs scripts/seed.ts"
+    "seed": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs scripts/seed.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1126.0",
@@ -28,6 +29,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.4.1",
     "@types/qrcode": "^1.5.6",
