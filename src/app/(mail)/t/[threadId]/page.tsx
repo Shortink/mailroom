@@ -1,26 +1,24 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BackIcon, DocIcon } from "@/components/icons";
-import { Composer } from "@/components/Composer";
-import { MessageBody } from "@/components/MessageBody";
-import { formatSize, formatWhen } from "@/lib/format";
-import { loadThread, markThreadRead } from "@/lib/mail/queries";
-import { getStorage } from "@/lib/storage";
+import { MarkRead } from "@/components/mail/MarkRead";
+import { MessageThread, type ThreadMessage } from "@/components/mail/MessageThread";
+import { QuickReply, ThreadActions } from "@/components/mail/ThreadActions";
 import { requireUser } from "@/lib/auth/require";
+import { formatSize, formatStamp, snippet } from "@/lib/format";
+import { addressColor, initials } from "@/lib/mail/identity";
+import { loadThread } from "@/lib/mail/queries";
+import { sanitizeEmailHtml } from "@/lib/mail/sanitize";
+import { getStorage } from "@/lib/storage";
 
-export const dynamic = "force-dynamic";
-
-export default async function ThreadPage({
-  params,
-}: {
-  params: Promise<{ threadId: string }>;
-}) {
+export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
   await requireUser();
   const { threadId } = await params;
+
   const thread = await loadThread(threadId);
   if (!thread) notFound();
 
-  await markThreadRead(threadId);
+  const unread = thread.messages.some(
+    (message) => message.direction === "inbound" && message.readAt === null,
+  );
 
   const storage = getStorage();
   const cids = Object.fromEntries(
@@ -29,7 +27,29 @@ export default async function ThreadPage({
       .map((file) => [file.contentId!, storage.url(file.storageKey)]),
   );
 
-  const participants = [...new Set(thread.participants)].join(", ");
+  const messages: ThreadMessage[] = thread.messages.map((message) => {
+    const outbound = message.direction === "outbound";
+
+    return {
+      id: message.id,
+      name: outbound ? "You" : (message.fromName ?? message.fromAddress ?? "Unknown sender"),
+      address: message.fromAddress ?? "",
+      to: (outbound ? message.to[0] : message.deliveredTo) ?? "",
+      time: formatStamp(message.receivedAt),
+      snippet: snippet(message.textBody),
+      initials: outbound ? "You" : initials(message.fromName, message.fromAddress),
+      html: message.htmlBody ? sanitizeEmailHtml(message.htmlBody, { cids }) : null,
+      text: message.textBody,
+      files: thread.attachments
+        .filter((file) => file.messageId === message.id && !file.contentId)
+        .map((file) => ({
+          id: file.id,
+          name: file.filename,
+          size: formatSize(file.sizeBytes),
+          url: storage.url(file.storageKey),
+        })),
+    };
+  });
 
   // Reply from the address the mail was delivered to, back to whoever last wrote.
   const inbound = thread.messages.filter((message) => message.direction === "inbound");
@@ -38,70 +58,69 @@ export default async function ThreadPage({
   const replyTo = latest?.fromAddress ?? "";
   const replySubject = thread.subject.startsWith("Re: ") ? thread.subject : `Re: ${thread.subject}`;
 
+  const people = [...new Set(inbound.map((message) => message.fromName ?? message.fromAddress))]
+    .filter(Boolean)
+    .slice(0, 2) as string[];
+
   return (
-    <>
-      <div className="flex h-11 flex-none items-center gap-2.5 border-b border-rule px-3.5">
-        <Link
-          href="/"
-          className="flex size-[26px] items-center justify-center rounded-md border border-rule text-ink-2 transition-colors hover:bg-hover"
-          aria-label="Back to inbox"
-        >
-          <BackIcon className="size-3.5" />
-        </Link>
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-8 py-6 scroll-clean">
+      <MarkRead threadId={thread.id} unread={unread} />
+
+      <div className="flex flex-none flex-wrap items-center gap-2">
+        {replyFrom && (
+          <span className="flex items-center gap-2 rounded-full bg-chip px-2.5 py-1 text-[11.5px]">
+            <span
+              className="size-[7px] rounded-full"
+              style={{ background: addressColor(replyFrom) }}
+            />
+            <span className="font-mono">{replyFrom}</span>
+          </span>
+        )}
+        <span className="font-mono text-[11px] text-ink3">
+          {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
+        </span>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-none border-b border-rule px-5 pt-3.5 pb-3">
-          <h1 className="mb-1 text-base font-semibold tracking-[-0.015em]">
-            {thread.subject || "(no subject)"}
-          </h1>
-          <p className="text-xs text-ink-3">
-            {participants} · {thread.messages.length}{thread.messages.length === 1 ? " message" : " messages"}
-          </p>
-        </div>
+      <h1 className="max-w-[720px] flex-none text-[27px] leading-[1.2] font-semibold tracking-[-0.02em] text-pretty">
+        {thread.subject || "(no subject)"}
+      </h1>
 
-        <div className="flex-1 overflow-auto px-5">
-          {thread.messages.map((message) => {
-            const files = thread.attachments.filter(
-              (file) => file.messageId === message.id && !file.contentId,
-            );
+      <div className="flex flex-none items-center gap-3">
+        <span className="flex flex-none -space-x-2.5">
+          {people.map((person) => (
+            <span
+              key={person}
+              className="flex size-[30px] items-center justify-center rounded-full border-2 border-bg text-[10.5px] font-semibold text-white"
+              style={{ background: "var(--brand)" }}
+            >
+              {initials(person, null)}
+            </span>
+          ))}
+        </span>
+        <span className="truncate text-[13px] text-ink2">
+          {people.length > 0 ? `${people.join(", ")} and you` : "You"}
+        </span>
 
-            return (
-              <article key={message.id} className="border-b border-rule py-3.5">
-                <div className="mb-[7px] flex items-baseline gap-2">
-                  <span className="text-[13px] font-semibold">
-                    {message.direction === "outbound" ? "You" : (message.fromName ?? message.fromAddress ?? "Unknown")}
-                  </span>
-                  <span className="text-xs text-ink-3">
-                    {message.direction === "outbound" ? message.fromAddress : message.deliveredTo}
-                  </span>
-                  <span className="ml-auto font-mono text-[11px] text-ink-3">
-                    {formatWhen(message.receivedAt)}
-                  </span>
-                </div>
-
-                <MessageBody html={message.htmlBody} text={message.textBody} cids={cids} />
-
-                {files.map((file) => (
-                  <a
-                    key={file.id}
-                    href={storage.url(file.storageKey)}
-                    className="mt-2.5 inline-flex items-center gap-[7px] rounded-md border border-rule px-2.5 py-1.5 text-xs text-ink-2 transition-colors hover:bg-hover"
-                  >
-                    <DocIcon className="size-3.5" />
-                    {file.filename}
-                    <span className="font-mono text-[11px] text-ink-3">
-                      {formatSize(file.sizeBytes)}
-                    </span>
-                  </a>
-                ))}
-              </article>
-            );
-          })}
-        </div>
-
-        <Composer threadId={thread.id} from={replyFrom} to={replyTo} subject={replySubject} />
+        <ThreadActions
+          threadId={thread.id}
+          archived={thread.archived}
+          replyFrom={replyFrom}
+          replyTo={replyTo}
+          replySubject={replySubject}
+        />
       </div>
-    </>
+
+      <MessageThread messages={messages} />
+
+      {replyTo && (
+        <QuickReply
+          threadId={thread.id}
+          replyFrom={replyFrom}
+          replyTo={replyTo}
+          replySubject={replySubject}
+          initials="You"
+        />
+      )}
+    </div>
   );
 }

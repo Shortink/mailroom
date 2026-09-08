@@ -8,6 +8,7 @@ import {
   loadThread,
   markThreadRead,
   registerAccount,
+  searchThreads,
 } from "../../src/lib/mail/queries";
 
 async function seedThread(opts: {
@@ -68,11 +69,15 @@ describe("listThreads", () => {
     expect(await listThreads({})).toHaveLength(1);
   });
 
-  it("finds threads by full-text search", async () => {
+  it("finds threads by full-text search across every address", async () => {
     await seedThread({ subject: "Quarterly invoice", at: "2026-09-01", deliveredTo: "hi@x.test", body: "amount due enclosed" });
     await seedThread({ subject: "Lunch", at: "2026-09-02", deliveredTo: "hi@x.test", body: "thursday?" });
 
-    const rows = await listThreads({ search: "invoice enclosed" });
+    const rows = await searchThreads("invoice enclosed", {
+      unread: false,
+      recent: false,
+      attachments: false,
+    });
     expect(rows.map((r) => r.subject)).toEqual(["Quarterly invoice"]);
   });
 
@@ -89,20 +94,19 @@ describe("listInboxes", () => {
     await seedThread({ subject: "b", at: "2026-09-02", deliveredTo: "spam@x.test" });
     await db.update(addresses).set({ pinned: true }).where(eq(addresses.address, "hi@x.test"));
 
-    const { pinned, otherCount, total } = await listInboxes();
-    expect(pinned.map((p) => p.address)).toEqual(["hi@x.test"]);
-    expect(pinned[0].unread).toBe(1);
-    expect(otherCount).toBe(1);
-    expect(total).toBe(2);
+    const { named, catchAll } = await listInboxes();
+    expect(named.map((inbox) => inbox.address)).toEqual(["hi@x.test"]);
+    expect(named[0].unread).toBe(1);
+    expect(catchAll.map((inbox) => inbox.address)).toEqual(["spam@x.test"]);
   });
 
   it("omits hidden addresses entirely", async () => {
     await seedThread({ subject: "a", at: "2026-09-01", deliveredTo: "junk@x.test" });
     await db.update(addresses).set({ hidden: true }).where(eq(addresses.address, "junk@x.test"));
 
-    const { pinned, otherCount } = await listInboxes();
-    expect(pinned).toHaveLength(0);
-    expect(otherCount).toBe(0);
+    const { named, catchAll } = await listInboxes();
+    expect(named).toHaveLength(0);
+    expect(catchAll).toHaveLength(0);
   });
 });
 
@@ -110,8 +114,8 @@ describe("registerAccount", () => {
   it("pins an address that never received mail", async () => {
     await registerAccount("me@x.test");
 
-    const { pinned } = await listInboxes();
-    expect(pinned.map((p) => p.address)).toEqual(["me@x.test"]);
+    const { named } = await listInboxes();
+    expect(named.map((inbox) => inbox.address)).toEqual(["me@x.test"]);
   });
 
   it("pins an address that already exists without erasing its history", async () => {
@@ -119,9 +123,9 @@ describe("registerAccount", () => {
 
     await registerAccount("hi@x.test");
 
-    const { pinned } = await listInboxes();
-    expect(pinned.map((p) => p.address)).toEqual(["hi@x.test"]);
-    expect(pinned[0].unread).toBe(1);
+    const { named } = await listInboxes();
+    expect(named.map((inbox) => inbox.address)).toEqual(["hi@x.test"]);
+    expect(named[0].unread).toBe(1);
   });
 });
 

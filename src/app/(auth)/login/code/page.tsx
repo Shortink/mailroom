@@ -16,7 +16,7 @@ export default function CodePage() {
       >
         <Field label="Authenticator code" name="code" autoComplete="one-time-code" mono />
         <SubmitButton>Sign in</SubmitButton>
-        <p className="mt-3.5 text-center text-xs text-ink-3">
+        <p className="mt-3.5 text-center text-xs text-ink3">
           Lost your device? Enter a recovery code instead.
         </p>
       </AuthShell>
