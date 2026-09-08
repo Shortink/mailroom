@@ -5,8 +5,15 @@ export default async function AddressList({
   searchParams,
 }: {
   params: Promise<{ address: string }>;
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; before?: string }>;
 }) {
-  const [{ address }, { filter }] = await Promise.all([params, searchParams]);
-  return <ThreadList address={decodeURIComponent(address)} unreadOnly={filter === "unread"} />;
+  const [{ address }, { filter, before }] = await Promise.all([params, searchParams]);
+
+  return (
+    <ThreadList
+      address={decodeURIComponent(address)}
+      unreadOnly={filter === "unread"}
+      before={before ? new Date(before) : undefined}
+    />
+  );
 }

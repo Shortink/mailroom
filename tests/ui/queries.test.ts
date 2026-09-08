@@ -48,7 +48,7 @@ describe("listThreads", () => {
     await seedThread({ subject: "older", at: "2026-01-01", deliveredTo: "hi@x.test" });
     await seedThread({ subject: "newer", at: "2026-09-01", deliveredTo: "hi@x.test" });
 
-    const rows = await listThreads({});
+    const { threads: rows } = await listThreads({});
     expect(rows.map((r) => r.subject)).toEqual(["newer", "older"]);
   });
 
@@ -56,7 +56,7 @@ describe("listThreads", () => {
     await seedThread({ subject: "to hi", at: "2026-09-01", deliveredTo: "hi@x.test" });
     await seedThread({ subject: "to billing", at: "2026-09-02", deliveredTo: "billing@x.test" });
 
-    const rows = await listThreads({ address: "billing@x.test" });
+    const { threads: rows } = await listThreads({ address: "billing@x.test" });
     expect(rows.map((r) => r.subject)).toEqual(["to billing"]);
   });
 
@@ -66,7 +66,7 @@ describe("listThreads", () => {
       threadId, direction: "outbound", status: "complete", subject: "busy", deliveredTo: "hi@x.test",
     });
 
-    expect(await listThreads({})).toHaveLength(1);
+    expect((await listThreads({})).threads).toHaveLength(1);
   });
 
   it("finds threads by full-text search across every address", async () => {
@@ -83,7 +83,7 @@ describe("listThreads", () => {
 
   it("reports unread counts per thread", async () => {
     await seedThread({ subject: "unread one", at: "2026-09-01", deliveredTo: "hi@x.test", unread: true });
-    const [row] = await listThreads({});
+    const [row] = (await listThreads({})).threads;
     expect(row.unread).toBe(1);
   });
 });
@@ -177,5 +177,33 @@ describe("markThreadRead", () => {
 
     const [after] = await db.select().from(messages).where(eq(messages.threadId, threadId));
     expect(after.readAt?.getTime()).toBe(before.readAt?.getTime());
+  });
+});
+
+describe("listThreads paging", () => {
+  it("caps a page and hands back a cursor for the rest", async () => {
+    for (let i = 0; i < 5; i++) {
+      await seedThread({ subject: `t${i}`, at: `2026-09-0${i + 1}`, deliveredTo: "hi@x.test" });
+    }
+
+    const first = await listThreads({ limit: 2 });
+    expect(first.threads.map((t) => t.subject)).toEqual(["t4", "t3"]);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await listThreads({ limit: 2, before: first.nextCursor! });
+    expect(second.threads.map((t) => t.subject)).toEqual(["t2", "t1"]);
+
+    const last = await listThreads({ limit: 2, before: second.nextCursor! });
+    expect(last.threads.map((t) => t.subject)).toEqual(["t0"]);
+    expect(last.nextCursor).toBeNull();
+  });
+
+  it("filters unread in the query rather than after the fact", async () => {
+    await seedThread({ subject: "read", at: "2026-09-01", deliveredTo: "hi@x.test" });
+    await seedThread({ subject: "new", at: "2026-09-02", deliveredTo: "hi@x.test", unread: true });
+
+    // A page of one would come back empty if unread were filtered after paging.
+    const page = await listThreads({ unreadOnly: true, limit: 1 });
+    expect(page.threads.map((t) => t.subject)).toEqual(["new"]);
   });
 });

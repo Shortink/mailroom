@@ -15,10 +15,11 @@ interface Props {
   box?: Box;
   address?: string;
   unreadOnly?: boolean;
+  before?: Date;
 }
 
-export async function ThreadList({ box = "inbox", address, unreadOnly }: Props) {
-  const threads = await listThreads({ box, address, unreadOnly });
+export async function ThreadList({ box = "inbox", address, unreadOnly, before }: Props) {
+  const { threads, nextCursor } = await listThreads({ box, address, unreadOnly, before });
 
   const items: ListItem[] = threads.map((thread) => {
     // Sent is identified by the address it left from; everything else by the
@@ -86,8 +87,26 @@ export async function ThreadList({ box = "inbox", address, unreadOnly }: Props) 
         <ThreadRows items={items} />
       )}
 
-      <footer className="flex-none border-t border-line px-4 py-2.5 font-mono text-[10.5px] text-ink3">
-        catch-all on · mail to any address arrives here
+      <footer className="flex flex-none items-center gap-2 border-t border-line px-4 py-2.5 font-mono text-[10.5px] text-ink3">
+        {before ? (
+          <Link href={base} className="transition-colors hover:text-ink2">
+            ← newest
+          </Link>
+        ) : (
+          <span className="truncate">catch-all on · mail to any address arrives here</span>
+        )}
+
+        {nextCursor && (
+          <Link
+            href={`${base}?${new URLSearchParams({
+              ...(unreadOnly ? { filter: "unread" } : {}),
+              before: nextCursor.toISOString(),
+            })}`}
+            className="ml-auto flex-none transition-colors hover:text-ink2"
+          >
+            older →
+          </Link>
+        )}
       </footer>
     </div>
   );
