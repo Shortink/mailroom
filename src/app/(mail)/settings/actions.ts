@@ -10,6 +10,7 @@ import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import { updateAddress, type AddressPatch } from "@/lib/mail/addresses";
+import { addressSettings } from "@/lib/mail/limits";
 import { registerAccount } from "@/lib/mail/queries";
 
 export async function addAccount(address: string) {
@@ -48,6 +49,10 @@ export async function signOut() {
 export async function saveAddress(address: string, patch: AddressPatch) {
   await requireUser();
 
-  await updateAddress(address, patch);
+  const parsed = addressSettings.safeParse(patch);
+  if (!parsed.success) return { error: "Those settings aren't valid." };
+
+  await updateAddress(address, parsed.data);
   revalidatePath("/", "layout");
+  return {};
 }

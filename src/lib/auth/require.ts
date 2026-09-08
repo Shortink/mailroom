@@ -4,7 +4,8 @@ import { currentVersion } from "./revoke";
 import { SESSION_COOKIE, readSession } from "./session";
 
 // The proxy redirect is optimistic. This is the check that actually guards
-// data, so every page and action that touches mail calls it.
+// data, so everything that reads mail calls it: pages, actions, and the list
+// components, which render in slots a layout does not gate.
 export async function requireUser() {
   const session = await readSession((await cookies()).get(SESSION_COOKIE)?.value);
   if (session?.stage !== "full") redirect("/login");

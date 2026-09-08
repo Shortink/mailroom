@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
+import { record } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/require";
 import { deleteDraft, saveDraft, type DraftInput } from "@/lib/mail/drafts";
 import { retryFailed } from "@/lib/mail/reconcile";
-import { outgoing } from "@/lib/mail/limits";
+import { draft, outgoing } from "@/lib/mail/limits";
 import {
   markThreadRead,
   searchThreads,
@@ -29,7 +30,7 @@ export type { SearchScope };
 export type SendResult = { ok: true; id: string; from: string } | { ok: false; error: string };
 
 export async function sendMessage(input: SendInput): Promise<SendResult> {
-  await requireUser();
+  const userId = await requireUser();
 
   const parsed = outgoing.safeParse({
     from: input.from.trim(),
@@ -57,6 +58,11 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
     // The draft existed only until the message left.
     if (input.draftId) await deleteDraft(input.draftId);
 
+    await record("message.sent", {
+      actor: userId,
+      detail: { from: parsed.data.from, to: parsed.data.to, threadId: input.threadId ?? null },
+    });
+
     revalidatePath("/", "layout");
     return { ok: true, id: messageId, from: parsed.data.from };
   } catch (error) {
@@ -73,7 +79,12 @@ export async function archiveThread(threadId: string, archived: boolean) {
 export async function storeDraft(input: DraftInput) {
   await requireUser();
 
-  const id = await saveDraft(input);
+  // The composer autosaves on every pause in typing, so an unbounded body
+  // grows the table for as long as someone keeps writing.
+  const parsed = draft.safeParse(input);
+  if (!parsed.success) return null;
+
+  const id = await saveDraft(parsed.data);
   revalidatePath("/", "layout");
   return id;
 }
