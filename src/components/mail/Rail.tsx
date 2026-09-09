@@ -12,6 +12,7 @@ import {
   SettingsIcon,
 } from "@/components/icons";
 import { addressColor, initials, localPart } from "@/lib/mail/identity";
+import { FailedMail } from "./FailedMail";
 import type { Inbox, Rail as RailData } from "@/lib/mail/queries";
 
 interface Props extends RailData {
@@ -48,23 +49,7 @@ export function Rail({
         </span>
       </header>
 
-      {failed > 0 && (
-        <div
-          className="rounded-[10px] border px-2.5 py-2"
-          style={{
-            background: "oklch(0.68 0.16 18 / 0.09)",
-            borderColor: "oklch(0.68 0.16 18 / 0.4)",
-          }}
-        >
-          <p className="text-[12.5px] font-medium">
-            {failed} {failed === 1 ? "message" : "messages"} not fetched
-          </p>
-          <p className="mt-0.5 font-mono text-[10px] leading-[1.5] text-ink3">
-            Resend took delivery but the content never arrived. Check the server
-            logs.
-          </p>
-        </div>
-      )}
+      {failed > 0 && <FailedMail count={failed} />}
 
       <nav className="flex flex-col gap-0.5">
         <BoxRow href="/" label="All mail" count={unread} active={path === "/"}>

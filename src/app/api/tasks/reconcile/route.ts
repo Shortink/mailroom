@@ -1,16 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
-import { and, eq, lt } from "drizzle-orm";
 import { requireEnv } from "@/lib/env";
-import { db } from "@/lib/db/client";
-import { messages } from "@/lib/db/schema";
-import { archiveStaleThreads } from "@/lib/mail/addresses";
-import { completeIngest } from "@/lib/mail/ingest";
-import { captureMessageId } from "@/lib/mail/send";
+import { reconcile } from "@/lib/mail/reconcile";
 
 export const runtime = "nodejs";
-
-const STALE_MS = 2 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
 
 function authorized(request: Request) {
   const presented = Buffer.from(
@@ -20,32 +12,10 @@ function authorized(request: Request) {
   return presented.length === expected.length && timingSafeEqual(presented, expected);
 }
 
+// Kept for hosts that cannot run a timer of their own. Long-lived deployments
+// sweep on their own from instrumentation.
 export async function POST(request: Request) {
   if (!authorized(request)) return new Response("unauthorized", { status: 401 });
 
-  const stale = await db
-    .select({ id: messages.id, direction: messages.direction })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.status, "pending"),
-        lt(messages.attempts, MAX_ATTEMPTS),
-        lt(messages.lastAttemptAt, new Date(Date.now() - STALE_MS)),
-      ),
-    );
-
-  let retried = 0;
-  for (const row of stale) {
-    try {
-      await (row.direction === "outbound" ? captureMessageId(row.id) : completeIngest(row.id));
-      retried += 1;
-    } catch {
-      // The handlers record their own attempts and eventually mark the row
-      // failed; one bad message must not stop the sweep.
-    }
-  }
-
-  const archived = await archiveStaleThreads();
-
-  return Response.json({ found: stale.length, retried, archived });
+  return Response.json(await reconcile());
 }
