@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { sendMessage, storeDraft } from "@/app/(mail)/actions";
-import { ChevronDownIcon, CloseIcon, MinimiseIcon } from "@/components/icons";
+import { ChevronDownIcon, CloseIcon, ExpandIcon, MinimiseIcon } from "@/components/icons";
 import { addressColor } from "@/lib/mail/identity";
 
 export interface Draft {
@@ -142,21 +142,34 @@ function Composer({
 
   return (
     <div className="animate-dock-in absolute right-6 bottom-0 z-30 w-[452px] rounded-t-[14px] border border-b-0 border-line bg-panel2 backdrop-blur-[28px] [box-shadow:var(--composer-shadow)] max-md:inset-0 max-md:w-auto max-md:overflow-y-auto max-md:rounded-none max-md:border-0">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+      {/* Collapsed, the whole bar reopens it: a lone icon is too small a
+          target for the only way back to a message you were writing. */}
+      <div
+        onClick={minimised ? () => setMinimised(false) : undefined}
+        className={`flex items-center gap-2 px-4 py-2.5 ${
+          minimised ? "cursor-pointer hover:bg-hover" : "border-b border-line"
+        }`}
+      >
         <span className="font-mono text-[10.5px] tracking-[0.1em] text-ink3 uppercase">
           {draft.threadId ? "Reply" : "New message"}
         </span>
         <button
           type="button"
-          onClick={() => setMinimised((value) => !value)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMinimised((value) => !value);
+          }}
           aria-label={minimised ? "Expand" : "Minimise"}
           className="ml-auto rounded p-1 text-ink3 transition-colors hover:bg-hover hover:text-ink2"
         >
-          <MinimiseIcon className="size-3.5" />
+          {minimised ? <ExpandIcon className="size-3.5" /> : <MinimiseIcon className="size-3.5" />}
         </button>
         <button
           type="button"
-          onClick={onClose}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
           aria-label="Close"
           className="rounded p-1 text-ink3 transition-colors hover:bg-hover hover:text-ink2"
         >
