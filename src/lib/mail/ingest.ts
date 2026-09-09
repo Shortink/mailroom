@@ -2,6 +2,7 @@ import { eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, attachments, messages, threads } from "../db/schema";
 import { getStorage } from "../storage";
+import { mailArrived } from "./events";
 import { forwardCopy } from "./forward";
 import { downloadAttachment, getAttachment, getReceivedEmail } from "./resend";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY } from "./limits";
@@ -88,6 +89,9 @@ export async function completeIngest(messageId: string) {
       .where(eq(threads.id, threadId));
 
     await forwardCopy(messageId);
+
+    // The message is only visible now, so this is the point worth announcing.
+    mailArrived();
   } catch (error) {
     if (row.attempts + 1 >= MAX_ATTEMPTS) {
       await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));

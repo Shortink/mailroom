@@ -1,4 +1,5 @@
 import { ComposeProvider } from "@/components/mail/Compose";
+import { LiveMail } from "@/components/mail/LiveMail";
 import { MobileBar } from "@/components/mail/MobileBar";
 import { PaneToolbar } from "@/components/mail/PaneToolbar";
 import { Rail } from "@/components/mail/Rail";
@@ -6,7 +7,7 @@ import { SearchProvider } from "@/components/mail/SearchField";
 import { ShellFrame } from "@/components/mail/ShellFrame";
 import { requireUser } from "@/lib/auth/require";
 import { findUser } from "@/lib/auth/users";
-import { listInboxes } from "@/lib/mail/queries";
+import { countFailed, listInboxes } from "@/lib/mail/queries";
 
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
@@ -18,7 +19,7 @@ export default async function MailLayout({
   list: React.ReactNode;
 }) {
   const userId = await requireUser();
-  const [rail, user] = await Promise.all([listInboxes(), findUser(userId)]);
+  const [rail, user, failed] = await Promise.all([listInboxes(), findUser(userId), countFailed()]);
 
   const accounts = rail.named.map((inbox) => inbox.address);
 
@@ -36,13 +37,20 @@ export default async function MailLayout({
         style={{ background: "var(--glow-b)" }}
       />
 
+      <LiveMail />
+
       <SearchProvider>
         {/* The composer sits at frame level rather than inside the pane, so it
             can still open from the phone inbox where the pane is off screen. */}
         <ComposeProvider accounts={accounts}>
           <MobileBar defaultFrom={accounts[0] ?? ""} />
 
-          <Rail {...rail} user={user?.email ?? ""} loadedAt={clock.format(new Date())} />
+          <Rail
+            {...rail}
+            failed={failed}
+            user={user?.email ?? ""}
+            loadedAt={clock.format(new Date())}
+          />
 
           <div data-slot="list" className="flex min-w-0 flex-none max-md:min-h-0 max-md:flex-1">
             {list}

@@ -16,3 +16,15 @@ export async function requireUser() {
 
   return session.sub;
 }
+
+// Same checks without the redirect, for endpoints that should answer with a
+// status rather than send a browser to the login page.
+export async function currentUser() {
+  const session = await readSession((await cookies()).get(SESSION_COOKIE)?.value);
+  if (session?.stage !== "full") return null;
+
+  const version = await currentVersion(session.sub);
+  if (version === null || version !== session.version) return null;
+
+  return session.sub;
+}
