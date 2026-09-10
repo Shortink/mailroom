@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { sendMessage, storeDraft } from "@/app/(mail)/actions";
 import { ChevronDownIcon, CloseIcon, ExpandIcon, MinimiseIcon } from "@/components/icons";
@@ -37,6 +38,8 @@ export function ComposeProvider({
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [sent, setSent] = useState<{ from: string; id: string } | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
 
   const open = useCallback((next: Draft) => {
     setSent(null);
@@ -54,6 +57,10 @@ export function ComposeProvider({
           onSent={(result) => {
             setDraft(null);
             setSent(result);
+
+            // Sending deletes the draft, so its own route has nothing left to
+            // show. Discarding already leaves for the same reason.
+            if (pathname.startsWith("/d/")) router.replace("/b/sent");
           }}
         />
       )}
