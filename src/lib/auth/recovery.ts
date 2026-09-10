@@ -6,6 +6,21 @@ import { hashPassword, verifyPassword } from "./password";
 
 const COUNT = 10;
 
+export const RECOVERY_COOKIE = "recovery";
+
+// The codes exist in the clear only between being issued and being read on the
+// page that shows them. Long enough to write them down, short enough not to sit
+// in the browser afterwards.
+export function recoveryCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 60 * 10,
+  };
+}
+
 export async function issueRecoveryCodes(userId: string) {
   await db.delete(recoveryCodes).where(eq(recoveryCodes.userId, userId));
 
