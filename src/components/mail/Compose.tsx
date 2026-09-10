@@ -112,7 +112,7 @@ function Composer({
     setSaved(false);
 
     const timer = setTimeout(async () => {
-      draftId.current = await storeDraft({
+      const id = await storeDraft({
         id: draftId.current,
         threadId: draft.threadId ?? null,
         from,
@@ -120,6 +120,8 @@ function Composer({
         subject,
         body: text,
       });
+      // A save the server refused leaves the existing draft where it is.
+      if (id) draftId.current = id;
       setSaved(true);
     }, 800);
 

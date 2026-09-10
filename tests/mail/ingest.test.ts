@@ -84,7 +84,10 @@ describe("completeIngest", () => {
   });
 
   it("attaches to an existing thread by in-reply-to and drops the placeholder", async () => {
-    const [existing] = await db.insert(threads).values({ subject: "Invoice" }).returning();
+    const [existing] = await db
+      .insert(threads)
+      .values({ subject: "Invoice", participants: ["billing@vendor.test", "hi@example.test"] })
+      .returning();
     await db.insert(messages).values({
       threadId: existing.id,
       direction: "inbound",
@@ -95,6 +98,7 @@ describe("completeIngest", () => {
     getReceivedEmail.mockResolvedValue({
       id: "r3",
       subject: "Re: Invoice",
+      from: "billing@vendor.test",
       headers: { "in-reply-to": "<original@vendor.test>" },
     });
 
@@ -107,6 +111,35 @@ describe("completeIngest", () => {
 
     const orphans = await db.select().from(threads).where(eq(threads.id, placeholder));
     expect(orphans).toHaveLength(0);
+  });
+
+  // The delivered-to address is a participant on every thread, so it cannot be
+  // the thing that proves a message belongs to one.
+  it("refuses a stranger quoting a message id from someone else's thread", async () => {
+    const [existing] = await db
+      .insert(threads)
+      .values({ subject: "Invoice", participants: ["billing@vendor.test", "hi@example.test"] })
+      .returning();
+    await db.insert(messages).values({
+      threadId: existing.id,
+      direction: "inbound",
+      status: "complete",
+      messageId: "<original@vendor.test>",
+    });
+
+    getReceivedEmail.mockResolvedValue({
+      id: "r4",
+      subject: "Re: Invoice",
+      from: "stranger@evil.test",
+      headers: { "in-reply-to": "<original@vendor.test>" },
+    });
+
+    const row = await pending("r4");
+    await completeIngest(row.id);
+
+    const [after] = await db.select().from(messages).where(eq(messages.id, row.id));
+    expect(after.threadId).toBe(row.threadId);
+    expect(after.threadId).not.toBe(existing.id);
   });
 
   it("attaches by subject and participant when headers are missing", async () => {

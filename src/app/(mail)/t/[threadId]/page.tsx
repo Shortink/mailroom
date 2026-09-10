@@ -56,6 +56,11 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   const latest = inbound.at(-1) ?? thread.messages.at(-1);
   const replyFrom = latest?.deliveredTo ?? "";
   const replyTo = latest?.fromAddress ?? "";
+
+  // Whoever wrote last owns the reply box, so a sender new to an established
+  // thread is worth naming before an answer goes back to them.
+  const earlier = new Set(inbound.slice(0, -1).map((message) => message.fromAddress));
+  const newSender = inbound.length > 1 && Boolean(replyTo) && !earlier.has(replyTo);
   const replySubject = thread.subject.startsWith("Re: ") ? thread.subject : `Re: ${thread.subject}`;
 
   const people = [...new Set(inbound.map((message) => message.fromName ?? message.fromAddress))]
@@ -79,6 +84,12 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
         <span className="font-mono text-[11px] text-ink3">
           {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
         </span>
+        {newSender && (
+          <span className="rounded-full bg-chip px-2.5 py-1 text-[11.5px] text-ink2">
+            First message here from <span className="font-mono">{replyTo}</span>. A reply goes to
+            them.
+          </span>
+        )}
       </div>
 
       <h1 className="max-w-[720px] flex-none text-[27px] leading-[1.2] font-semibold tracking-[-0.02em] text-pretty">

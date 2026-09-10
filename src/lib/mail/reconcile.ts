@@ -3,9 +3,12 @@ import { db } from "../db/client";
 import { messages } from "../db/schema";
 import { archiveStaleThreads } from "./addresses";
 import { completeIngest } from "./ingest";
+import { CLAIM_MS } from "./limits";
 import { captureMessageId } from "./send";
 
-const STALE_MS = 2 * 60 * 1000;
+// Matches the claim window in completeIngest, so the sweep only picks up work
+// that has actually been abandoned rather than work still in progress.
+const STALE_MS = CLAIM_MS;
 const MAX_ATTEMPTS = 5;
 
 export interface ReconcileResult {
@@ -16,7 +19,7 @@ export interface ReconcileResult {
 
 // Ingest finishes out of band, so anything left pending is work that never
 // came back. Callable from the timer or the task endpoint; both are safe to
-// run concurrently because completeIngest ignores rows already complete.
+// run concurrently because completeIngest claims each row before working on it.
 export async function reconcile(): Promise<ReconcileResult> {
   const stale = await db
     .select({ id: messages.id, direction: messages.direction })

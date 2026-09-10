@@ -11,7 +11,8 @@ export type SecurityEvent =
   | "invite.created"
   | "invite.accepted"
   | "account.created"
-  | "session.revoked";
+  | "session.revoked"
+  | "message.sent";
 
 // Kept separate from login_attempts, which drives rate limiting and is pruned
 // by time. These rows are kept for the operator to read after an incident.

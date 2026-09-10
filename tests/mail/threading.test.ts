@@ -14,6 +14,7 @@ function incoming(overrides: Partial<Incoming> = {}): Incoming {
     references: [],
     subject: "Invoice",
     participants: ["a@x.test"],
+    domain: "mail.test",
     receivedAt: now,
     ...overrides,
   };
@@ -73,7 +74,7 @@ describe("resolveThread", () => {
     expect(result).toEqual({ action: "attach", threadId: "T-header" });
   });
 
-  it("merges into the oldest thread when headers span two", () => {
+  it("joins the oldest thread when headers span two", () => {
     const result = resolveThread(
       incoming({ inReplyTo: "<a@x>", references: ["<b@x>"] }),
       candidates({
@@ -84,7 +85,7 @@ describe("resolveThread", () => {
       }),
       { oldest: (ids) => (ids.includes("T-old") ? "T-old" : ids[0]) },
     );
-    expect(result).toEqual({ action: "merge", threadId: "T-old", absorb: ["T-new"] });
+    expect(result).toEqual({ action: "attach", threadId: "T-old" });
   });
 
   it("does not merge when several ids point at one thread", () => {
@@ -179,7 +180,7 @@ describe("resolveThread", () => {
     expect(result).toEqual({ action: "create" });
   });
 
-  it("still merges when the sender belongs to both threads", () => {
+  it("joins the oldest rather than folding two threads together", () => {
     const result = resolveThread(
       incoming({ inReplyTo: "<a@x>", references: ["<b@x>"] }),
       candidates({
@@ -190,7 +191,50 @@ describe("resolveThread", () => {
       }),
       { oldest: (ids) => (ids.includes("T-old") ? "T-old" : ids[0]) },
     );
-    expect(result).toEqual({ action: "merge", threadId: "T-old", absorb: ["T-new"] });
+    expect(result).toEqual({ action: "attach", threadId: "T-old" });
+  });
+
+  // Mail is received catch-all, so an operator address is on every thread and
+  // a stranger gets one by writing in.
+  it("refuses a header match sharing only an operator address", () => {
+    const result = resolveThread(
+      incoming({
+        inReplyTo: "<a@x>",
+        participants: ["stranger@evil.test", "hello@mail.test"],
+      }),
+      candidates({
+        byMessageId: [
+          { messageId: "<a@x>", threadId: "T1", participants: ["customer@x.test", "hello@mail.test"] },
+        ],
+      }),
+    );
+    expect(result).toEqual({ action: "create" });
+  });
+
+  it("refuses a subject match sharing only an operator address", () => {
+    const result = resolveThread(
+      incoming({ participants: ["stranger@evil.test", "hello@mail.test"] }),
+      candidates({
+        bySubject: [
+          {
+            threadId: "T2",
+            participants: ["customer@x.test", "hello@mail.test"],
+            lastMessageAt: now,
+          },
+        ],
+      }),
+    );
+    expect(result).toEqual({ action: "create" });
+  });
+
+  it("creates a thread when the delivered-to domain is unknown", () => {
+    const result = resolveThread(
+      incoming({ inReplyTo: "<a@x>", domain: "" }),
+      candidates({
+        byMessageId: [{ messageId: "<a@x>", threadId: "T1", participants: ["a@x.test"] }],
+      }),
+    );
+    expect(result).toEqual({ action: "create" });
   });
 
   it("ignores header ids that match nothing", () => {

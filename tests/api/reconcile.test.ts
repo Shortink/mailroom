@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
 import { messages, threads } from "../../src/lib/db/schema";
+import { CLAIM_MS } from "../../src/lib/mail/limits";
 
 const completeIngest = vi.fn();
 vi.mock("../../src/lib/mail/ingest", () => ({
@@ -15,7 +16,9 @@ vi.mock("../../src/lib/mail/send", () => ({
 
 const { POST } = await import("../../src/app/api/tasks/reconcile/route");
 
-const STALE = new Date(Date.now() - 10 * 60 * 1000);
+// Tied to the claim window rather than a number of its own, so widening the
+// window cannot stop these rows counting as abandoned.
+const STALE = new Date(Date.now() - CLAIM_MS - 60 * 1000);
 const FRESH = new Date();
 
 function call(token?: string) {
@@ -104,7 +107,7 @@ describe("reconcile", () => {
 
 describe("reconcile dispatch", () => {
   it("captures message ids for outbound rows instead of re-ingesting them", async () => {
-    const stale = new Date(Date.now() - 10 * 60 * 1000);
+    const stale = new Date(Date.now() - CLAIM_MS - 60 * 1000);
     const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
     await db.insert(messages).values({
       threadId: thread.id,
