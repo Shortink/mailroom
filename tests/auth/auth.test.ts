@@ -8,7 +8,7 @@ import { readSession, signSession } from "../../src/lib/auth/session";
 import { confirmEnrolment, startEnrolment, verifyCode } from "../../src/lib/auth/totp";
 import { revokeSessions } from "../../src/lib/auth/revoke";
 import { consumeRecoveryCode, issueRecoveryCodes } from "../../src/lib/auth/recovery";
-import { recordAttempt, tooManyAttempts } from "../../src/lib/auth/rateLimit";
+import { UNKNOWN_IP, recordAttempt, tooManyAttempts } from "../../src/lib/auth/rateLimit";
 
 async function makeUser(email = `u${Math.random()}@example.test`) {
   const [user] = await db
@@ -133,6 +133,18 @@ describe("rate limiting", () => {
   it("allows a user under the threshold", async () => {
     for (let i = 0; i < 4; i += 1) await recordAttempt("a@example.test", "1.1.1.1", false);
     expect(await tooManyAttempts("a@example.test", "1.1.1.1")).toBe(false);
+  });
+
+  // With no proxy in front every caller shares one placeholder address, so
+  // counting it would let anyone's five failures lock out everyone.
+  it("counts only the email when there is no address to count", async () => {
+    for (let i = 0; i < 5; i += 1) await recordAttempt(`u${i}@example.test`, UNKNOWN_IP, false);
+    expect(await tooManyAttempts("fresh@example.test", UNKNOWN_IP)).toBe(false);
+  });
+
+  it("still blocks the account that failed, with no address to count", async () => {
+    for (let i = 0; i < 5; i += 1) await recordAttempt("a@example.test", UNKNOWN_IP, false);
+    expect(await tooManyAttempts("a@example.test", UNKNOWN_IP)).toBe(true);
   });
 
   it("blocks after five failures from one address", async () => {

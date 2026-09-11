@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { recordAttempt, tooManyAttempts } from "@/lib/auth/rateLimit";
+import { UNKNOWN_IP, recordAttempt, tooManyAttempts } from "@/lib/auth/rateLimit";
 import { consumeRecoveryCode } from "@/lib/auth/recovery";
 import { SESSION_COOKIE, cookieOptions, readSession, signSession } from "@/lib/auth/session";
 import { AlreadyEnrolled, confirmEnrolment, startEnrolment, verifyCode } from "@/lib/auth/totp";
@@ -26,7 +26,7 @@ const DECOY = hashPassword("decoy");
 // and one client rotating the header defeats the IP half of the rate limit.
 // Operators opt in once they have that proxy.
 async function clientIp() {
-  if (process.env.TRUST_PROXY !== "true") return "direct";
+  if (process.env.TRUST_PROXY !== "true") return UNKNOWN_IP;
   const headers = await nextHeaders();
   return headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ?? "unknown";
 }
