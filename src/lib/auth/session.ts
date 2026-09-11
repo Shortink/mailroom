@@ -29,7 +29,7 @@ export async function readSession(token: string | undefined) {
     if (!payload.sub) return null;
     return {
       sub: payload.sub,
-      stage: (payload.stage as Stage) ?? "full",
+      stage: (payload.stage as Stage) ?? "totp",
       version: typeof payload.ver === "number" ? payload.ver : 0,
     };
   } catch {
