@@ -153,7 +153,8 @@ export const recoveryCodes = pgTable("recovery_codes", {
 
 export const invites = pgTable("invites", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tokenHash: text("token_hash").notNull().unique(),
+  selector: text("selector").notNull().unique(),
+  tokenHash: text("token_hash").notNull(),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
