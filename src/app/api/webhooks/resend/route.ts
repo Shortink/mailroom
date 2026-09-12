@@ -6,6 +6,7 @@ import { db } from "@/lib/db/client";
 import { messages, threads } from "@/lib/db/schema";
 import { completeIngest } from "@/lib/mail/ingest";
 import { forwardMarker } from "@/lib/mail/marker";
+import { MAX_SUBJECT } from "@/lib/mail/limits";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
       .where(eq(messages.resendId, resendId));
     if (existing) return null;
 
-    const subject = event.data.subject ?? "";
+    const subject = (event.data.subject ?? "").slice(0, MAX_SUBJECT);
     const [thread] = await tx.insert(threads).values({ subject }).returning({ id: threads.id });
 
     const [row] = await tx
