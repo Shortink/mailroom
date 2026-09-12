@@ -50,12 +50,22 @@ describe("getAttachment", () => {
 describe("downloadAttachment", () => {
   it("returns the bytes", async () => {
     stubFetch(new Response(new Uint8Array([1, 2, 3])));
-    expect(await downloadAttachment("https://cdn.test/f")).toEqual(Buffer.from([1, 2, 3]));
+    expect(await downloadAttachment("https://cdn.test/f", 16)).toEqual(Buffer.from([1, 2, 3]));
   });
 
   it("throws on a failed download", async () => {
     stubFetch(new Response("gone", { status: 410 }));
-    await expect(downloadAttachment("https://cdn.test/f")).rejects.toThrow(/410/);
+    await expect(downloadAttachment("https://cdn.test/f", 16)).rejects.toThrow(/410/);
+  });
+
+  it("gives up on a body longer than the limit", async () => {
+    stubFetch(new Response(new Uint8Array([1, 2, 3, 4, 5])));
+    expect(await downloadAttachment("https://cdn.test/f", 4)).toBeNull();
+  });
+
+  it("keeps a body exactly on the limit", async () => {
+    stubFetch(new Response(new Uint8Array([1, 2, 3, 4])));
+    expect(await downloadAttachment("https://cdn.test/f", 4)).toEqual(Buffer.from([1, 2, 3, 4]));
   });
 });
 

@@ -5,7 +5,7 @@ import { getStorage } from "../storage";
 import { mailArrived } from "./events";
 import { forwardCopy } from "./forward";
 import { downloadAttachment, getAttachment, getReceivedEmail } from "./resend";
-import { CLAIM_MS, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY } from "./limits";
+import { CLAIM_MS, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY, MAX_SUBJECT } from "./limits";
 import { normalizeSubject, resolveThread, type Incoming } from "./threading";
 
 const MAX_ATTEMPTS = 5;
@@ -44,7 +44,7 @@ export async function completeIngest(messageId: string) {
       .filter(Boolean)
       .slice(0, MAX_REFERENCES);
     const inReplyTo = headers["in-reply-to"] ?? null;
-    const subject = mail.subject ?? row.subject;
+    const subject = (mail.subject ?? row.subject).slice(0, MAX_SUBJECT);
     const deliveredTo = mail.received_for?.[0] ?? row.deliveredTo;
     const fromAddress = mail.from ?? row.fromAddress;
 
@@ -193,11 +193,18 @@ async function storeAttachments(
 
   const storage = getStorage();
 
-  // Receiving is catch-all, so anyone can drive attachment storage. Bound both
-  // the count and the size rather than trusting what arrives.
+  // Receiving is catch-all, so anyone can drive attachment storage. The count is
+  // bounded here and the size at the download, which is the only place the real
+  // length is known.
   for (const item of listed.slice(0, MAX_ATTACHMENTS)) {
     if (item.size > MAX_ATTACHMENT_BYTES) continue;
     const key = `${messageId}/${item.id}`;
+
+    const download = await getAttachment(resendId, item.id);
+    const body = await downloadAttachment(download.download_url, MAX_ATTACHMENT_BYTES);
+    if (!body) continue;
+
+    await storage.put(key, body, item.content_type);
 
     await db
       .insert(attachments)
@@ -205,14 +212,10 @@ async function storeAttachments(
         messageId,
         filename: item.filename,
         contentType: item.content_type,
-        sizeBytes: item.size,
+        sizeBytes: body.length,
         storageKey: key,
         contentId: item.content_id ?? null,
       })
       .onConflictDoNothing();
-
-    const download = await getAttachment(resendId, item.id);
-    const body = await downloadAttachment(download.download_url);
-    await storage.put(key, body, item.content_type);
   }
 }
