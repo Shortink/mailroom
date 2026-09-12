@@ -7,28 +7,39 @@ import { createUser } from "./users";
 
 const TTL_HOURS = 48;
 
+// The token names its own row in front of the secret, so a lookup is one
+// indexed read rather than a hash per open invite.
 export async function createInvite(createdBy: string, ttlHours = TTL_HOURS) {
-  const token = randomBytes(24).toString("hex");
+  const selector = randomBytes(8).toString("hex");
+  const secret = randomBytes(24).toString("hex");
 
   await db.insert(invites).values({
-    tokenHash: await hashPassword(token),
+    selector,
+    tokenHash: await hashPassword(secret),
     createdBy,
     expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000),
   });
 
-  return token;
+  return `${selector}.${secret}`;
 }
 
 async function findOpenInvite(token: string) {
-  const open = await db
+  const [selector, secret] = token.split(".");
+  if (!selector || !secret) return null;
+
+  const [row] = await db
     .select()
     .from(invites)
-    .where(and(isNull(invites.acceptedAt), gt(invites.expiresAt, new Date())));
+    .where(
+      and(
+        eq(invites.selector, selector),
+        isNull(invites.acceptedAt),
+        gt(invites.expiresAt, new Date()),
+      ),
+    );
+  if (!row) return null;
 
-  for (const row of open) {
-    if (await verifyPassword(row.tokenHash, token)) return row;
-  }
-  return null;
+  return (await verifyPassword(row.tokenHash, secret)) ? row : null;
 }
 
 export async function inviteIsValid(token: string) {
