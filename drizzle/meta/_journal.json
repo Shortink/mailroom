@@ -29,6 +29,13 @@
       "when": 1788755283833,
       "tag": "0003_hard_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789349367324,
+      "tag": "0004_bitter_celestials",
+      "breakpoints": true
     }
   ]
 }

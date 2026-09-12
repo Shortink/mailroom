@@ -120,6 +120,9 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   totpSecret: text("totp_secret"),
   totpConfirmedAt: timestamp("totp_confirmed_at", { withTimezone: true }),
+  // The last step a code was accepted for. A second factor is meant to be used
+  // once, so anything at or before this is refused inside the window.
+  totpLastStep: integer("totp_last_step"),
   // Bumped on password change, TOTP re-enrolment and logout, so outstanding
   // stateless sessions stop verifying.
   sessionVersion: integer("session_version").notNull().default(0),
