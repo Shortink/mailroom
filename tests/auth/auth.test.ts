@@ -89,6 +89,18 @@ describe("totp", () => {
     expect(await verifyCode(user.id, "123456")).toBe(false);
   });
 
+  // The validation window stays open a minute or so either side, so a code
+  // someone sees in that time should not work twice.
+  it("accepts a code once and refuses it afterwards", async () => {
+    const user = await makeUser();
+    const { secret } = await startEnrolment(user.id);
+    await confirmEnrolment(user.id, new TOTP({ secret }).generate());
+
+    const code = new TOTP({ secret }).generate();
+    expect(await verifyCode(user.id, code)).toBe(true);
+    expect(await verifyCode(user.id, code)).toBe(false);
+  });
+
   it("returns an otpauth uri that carries the account email", async () => {
     const user = await makeUser("someone@example.test");
     const { uri } = await startEnrolment(user.id);

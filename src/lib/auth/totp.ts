@@ -1,13 +1,16 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { Secret, TOTP } from "otpauth";
 import { db } from "../db/client";
 import { users } from "../db/schema";
+
+const PERIOD = 30;
 
 function totpFor(secret: string, email: string) {
   return new TOTP({
     issuer: "Mailroom",
     label: email,
     secret: Secret.fromBase32(secret),
+    period: PERIOD,
   });
 }
 
@@ -47,8 +50,32 @@ export async function confirmEnrolment(userId: string, code: string) {
   return true;
 }
 
+// validate returns how many steps away the match was, so the step it matched
+// is the current one plus that offset.
+function stepOf(delta: number) {
+  return Math.floor(Date.now() / 1000 / PERIOD) + delta;
+}
+
 export async function verifyCode(userId: string, code: string) {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   if (!user?.totpSecret || !user.totpConfirmedAt) return false;
-  return totpFor(user.totpSecret, user.email).validate({ token: code, window: 1 }) !== null;
+
+  const delta = totpFor(user.totpSecret, user.email).validate({ token: code, window: 1 });
+  if (delta === null) return false;
+
+  // A code is good once. Claiming the step in the where clause settles the
+  // race between two submissions of the same one.
+  const step = stepOf(delta);
+  const claimed = await db
+    .update(users)
+    .set({ totpLastStep: step })
+    .where(
+      and(
+        eq(users.id, userId),
+        or(isNull(users.totpLastStep), lt(users.totpLastStep, step)),
+      ),
+    )
+    .returning({ id: users.id });
+
+  return claimed.length > 0;
 }
