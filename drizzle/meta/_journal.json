@@ -43,6 +43,13 @@
       "when": 1789349383240,
       "tag": "0005_amused_young_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789349428867,
+      "tag": "0006_spotty_garia",
+      "breakpoints": true
     }
   ]
 }

@@ -40,7 +40,12 @@ export const messages = pgTable(
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
     direction: direction("direction").notNull(),
+    // status is what the reader sees; ingestedAt is whether the work behind the
+    // message finished. Separate points, because attachments and the forwarded
+    // copy come after the body.
     status: messageStatus("status").notNull().default("pending"),
+    ingestedAt: timestamp("ingested_at", { withTimezone: true }),
+    forwardedAt: timestamp("forwarded_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(0),
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     resendId: text("resend_id"),

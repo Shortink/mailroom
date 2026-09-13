@@ -212,9 +212,30 @@ describe("completeIngest", () => {
     expect(forwardCopy).toHaveBeenCalledWith(row.id);
   });
 
-  it("does nothing for a message already complete", async () => {
-    const row = await pending("r8", { status: "complete" });
+  it("does nothing for a message already ingested", async () => {
+    const row = await pending("r8", { status: "complete", ingestedAt: new Date() });
     await completeIngest(row.id);
     expect(getReceivedEmail).not.toHaveBeenCalled();
+  });
+
+  // A body that landed before the attachments failed leaves a complete message
+  // the sweep is still responsible for.
+  it("picks up a complete message whose ingest never finished", async () => {
+    getReceivedEmail.mockResolvedValue({ id: "r7", subject: "Hi" });
+
+    const row = await pending("r7", { status: "complete" });
+    await completeIngest(row.id);
+
+    expect(getReceivedEmail).toHaveBeenCalled();
+  });
+
+  it("stamps ingestedAt once the work behind the message is done", async () => {
+    getReceivedEmail.mockResolvedValue({ id: "r6", subject: "Hi" });
+
+    const row = await pending("r6");
+    await completeIngest(row.id);
+
+    const [done] = await db.select().from(messages).where(eq(messages.id, row.id));
+    expect(done.ingestedAt).not.toBeNull();
   });
 });

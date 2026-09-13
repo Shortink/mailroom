@@ -79,6 +79,27 @@ describe("forwardCopy", () => {
     await expect(forwardCopy(row.id)).resolves.toBeUndefined();
   });
 
+  // The steps after this one can be retried, so the claim is what stops a
+  // second copy going out.
+  it("sends one copy however many times it is called", async () => {
+    const row = await seed();
+
+    await forwardCopy(row.id);
+    await forwardCopy(row.id);
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the claim back when the send fails, so the sweep tries again", async () => {
+    sendEmail.mockRejectedValueOnce(new Error("boom"));
+    const row = await seed();
+
+    await forwardCopy(row.id);
+    await forwardCopy(row.id);
+
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores an unknown message id", async () => {
     await expect(forwardCopy("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
     expect(sendEmail).not.toHaveBeenCalled();
