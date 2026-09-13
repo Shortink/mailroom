@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { messages } from "../db/schema";
@@ -9,7 +9,13 @@ export async function forwardCopy(messageId: string) {
   const forwardTo = process.env.FORWARD_TO;
   if (!forwardTo) return;
 
-  const [row] = await db.select().from(messages).where(eq(messages.id, messageId));
+  // Claimed in the statement that stamps it, so a retried ingest matches
+  // nothing here and the copy goes out once.
+  const [row] = await db
+    .update(messages)
+    .set({ forwardedAt: new Date() })
+    .where(and(eq(messages.id, messageId), isNull(messages.forwardedAt)))
+    .returning();
   if (!row) return;
 
   const preamble = [
@@ -30,6 +36,11 @@ export async function forwardCopy(messageId: string) {
       headers: { "X-Forwarded-By": forwardMarker() },
     });
   } catch {
-    // The message is already stored; a failed courtesy copy must not fail ingest.
+    // Hand the claim back so the sweep tries again. The message is already
+    // stored either way; a failed courtesy copy must not fail ingest.
+    await db
+      .update(messages)
+      .set({ forwardedAt: null })
+      .where(eq(messages.id, messageId));
   }
 }

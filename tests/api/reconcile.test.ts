@@ -30,7 +30,15 @@ function call(token?: string) {
   );
 }
 
-async function seed(rows: { resendId: string; attempts?: number; lastAttemptAt?: Date; status?: "pending" | "complete" | "failed" }[]) {
+async function seed(
+  rows: {
+    resendId: string;
+    attempts?: number;
+    lastAttemptAt?: Date | null;
+    ingestedAt?: Date;
+    status?: "pending" | "complete" | "failed";
+  }[],
+) {
   const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
   await db.insert(messages).values(
     rows.map((row) => ({
@@ -39,7 +47,8 @@ async function seed(rows: { resendId: string; attempts?: number; lastAttemptAt?:
       status: row.status ?? ("pending" as const),
       resendId: row.resendId,
       attempts: row.attempts ?? 0,
-      lastAttemptAt: row.lastAttemptAt ?? STALE,
+      lastAttemptAt: row.lastAttemptAt === null ? null : (row.lastAttemptAt ?? STALE),
+      ingestedAt: row.ingestedAt ?? null,
     })),
   );
 }
@@ -88,10 +97,27 @@ describe("reconcile", () => {
     expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0 });
   });
 
-  it("ignores rows that are not pending", async () => {
-    await seed([{ resendId: "done", status: "complete" }, { resendId: "dead", status: "failed" }]);
+  it("ignores rows that are finished or spent", async () => {
+    await seed([
+      { resendId: "done", status: "complete", ingestedAt: new Date() },
+      { resendId: "dead", status: "failed" },
+    ]);
 
     expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0 });
+  });
+
+  // A complete message whose attachments or forwarded copy never landed is
+  // still outstanding work.
+  it("picks up a complete message that never finished ingesting", async () => {
+    await seed([{ resendId: "half", status: "complete" }]);
+
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 1, retried: 1, archived: 0 });
+  });
+
+  it("picks up a row that never got its first attempt", async () => {
+    await seed([{ resendId: "untouched", lastAttemptAt: null }]);
+
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 1, retried: 1, archived: 0 });
   });
 
   it("keeps sweeping after one row throws", async () => {

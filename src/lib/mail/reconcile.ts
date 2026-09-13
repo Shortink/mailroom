@@ -1,4 +1,4 @@
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { messages } from "../db/schema";
 import { archiveStaleThreads } from "./addresses";
@@ -26,9 +26,18 @@ export async function reconcile(): Promise<ReconcileResult> {
     .from(messages)
     .where(
       and(
-        eq(messages.status, "pending"),
+        or(
+          and(eq(messages.direction, "inbound"), isNull(messages.ingestedAt)),
+          and(eq(messages.direction, "outbound"), eq(messages.status, "pending")),
+        ),
+        ne(messages.status, "failed"),
         lt(messages.attempts, MAX_ATTEMPTS),
-        lt(messages.lastAttemptAt, new Date(Date.now() - STALE_MS)),
+        // NULL fails every comparison, so a row that never got a first attempt
+        // is invisible to an "older than" test on its own.
+        or(
+          isNull(messages.lastAttemptAt),
+          lt(messages.lastAttemptAt, new Date(Date.now() - STALE_MS)),
+        ),
       ),
     );
 

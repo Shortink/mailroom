@@ -26,7 +26,7 @@ export async function completeIngest(messageId: string) {
     .where(
       and(
         eq(messages.id, messageId),
-        ne(messages.status, "complete"),
+        isNull(messages.ingestedAt),
         or(
           isNull(messages.lastAttemptAt),
           lt(messages.lastAttemptAt, new Date(Date.now() - CLAIM_MS)),
@@ -88,34 +88,44 @@ export async function completeIngest(messageId: string) {
       await db.delete(threads).where(eq(threads.id, row.threadId));
     }
 
-    await storeAttachments(messageId, row.resendId, mail.attachments ?? []);
-
-    if (deliveredTo) {
-      await db.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
-    }
-
     const [thread] = await db
       .select({ participants: threads.participants })
       .from(threads)
       .where(eq(threads.id, threadId));
 
+    // Counted rather than incremented, because the steps after this one can be
+    // retried and an increment would run twice. Participants land here too:
+    // matching a later reply needs them before the attachments are fetched.
     await db
       .update(threads)
       .set({
         subject,
         lastMessageAt: new Date(),
-        messageCount: sql`${threads.messageCount} + 1`,
+        messageCount: sql`(select count(*) from ${messages} where ${messages.threadId} = ${threadId})`,
         participants: [...new Set([...(thread?.participants ?? []), ...participants])],
       })
       .where(eq(threads.id, threadId));
 
+    if (deliveredTo) {
+      await db.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
+    }
+
+    // Each step below repeats safely, so a failure leaves ingestedAt unset and
+    // the sweep finishes what is left.
+    await storeAttachments(messageId, row.resendId, mail.attachments ?? []);
     await forwardCopy(messageId);
 
-    // The message is only visible now, so this is the point worth announcing.
+    await db.update(messages).set({ ingestedAt: new Date() }).where(eq(messages.id, messageId));
+
     mailArrived();
   } catch (error) {
+    // A body that never arrived is worth showing as a failure. One that did
+    // stays readable even when the work behind it runs out of attempts.
     if (row.attempts + 1 >= MAX_ATTEMPTS) {
-      await db.update(messages).set({ status: "failed" }).where(eq(messages.id, messageId));
+      await db
+        .update(messages)
+        .set({ status: "failed" })
+        .where(and(eq(messages.id, messageId), eq(messages.status, "pending")));
     }
     throw error;
   }
