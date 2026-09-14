@@ -18,6 +18,9 @@ services:
       db:
         condition: service_healthy
     environment:
+      # PORT in .env picks the host port below. The server inside always
+      # listens on 3000, or that mapping points at nothing.
+      PORT: 3000
       # The bundled Postgres unless .env names another one.
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:${POSTGRES_PASSWORD:-mailroom}@db:5432/mailroom}
       STORAGE_DRIVER: fs
