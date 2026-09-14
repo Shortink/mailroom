@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { attachments } from "@/lib/db/schema";
-import { requireUser } from "@/lib/auth/require";
+import { currentUser } from "@/lib/auth/require";
+import { attachmentUrlIsValid } from "@/lib/mail/attachmentLink";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -17,11 +18,14 @@ const INLINE_TYPES = new Set([
   "application/pdf",
 ]);
 
-export async function GET(_: Request, { params }: { params: Promise<{ key: string }> }) {
-  await requireUser();
-
+export async function GET(request: Request, { params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
   const storageKey = decodeURIComponent(key);
+
+  // A session, or a link the thread page signed for the frame that has none.
+  const { searchParams } = new URL(request.url);
+  const signed = attachmentUrlIsValid(storageKey, searchParams.get("exp"), searchParams.get("sig"));
+  if (!signed && !(await currentUser())) return new Response("unauthorized", { status: 401 });
 
   const [row] = await db
     .select()

@@ -6,9 +6,9 @@ import { SESSION_COOKIE, readSession } from "@/lib/auth/session";
 // layer via requireUser.
 //
 // Each of these routes authenticates itself: the webhook by Svix signature,
-// the inbound route by bearer token,
+// the inbound route by bearer token, attachments by session or signed link,
 // the task endpoint by bearer token, and the auth routes by definition.
-const PUBLIC = ["/api/webhooks/", "/api/inbound/", "/api/tasks/", "/login", "/setup", "/invite/"];
+const PUBLIC = ["/api/webhooks/", "/api/inbound/", "/api/tasks/", "/api/attachments/", "/login", "/setup", "/invite/"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
