@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth/require";
 import { formatSize, formatStamp, snippet } from "@/lib/format";
 import { signAttachmentUrl } from "@/lib/mail/attachmentLink";
 import { addressColor, initials } from "@/lib/mail/identity";
+import { referencedCids } from "@/lib/mail/parts";
 import { loadThread } from "@/lib/mail/queries";
 import { sanitizeEmailHtml } from "@/lib/mail/sanitize";
 import { getStorage } from "@/lib/storage";
@@ -34,6 +35,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
 
   const messages: ThreadMessage[] = thread.messages.map((message) => {
     const outbound = message.direction === "outbound";
+    const drawn = referencedCids(message.htmlBody);
 
     return {
       id: message.id,
@@ -46,7 +48,8 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
       html: message.htmlBody ? sanitizeEmailHtml(message.htmlBody, { cids }) : null,
       text: message.textBody,
       files: thread.attachments
-        .filter((file) => file.messageId === message.id && !file.contentId)
+        .filter((file) => file.messageId === message.id)
+        .filter((file) => !(file.contentId && drawn.has(file.contentId)))
         .map((file) => ({
           id: file.id,
           name: file.filename,
