@@ -62,3 +62,15 @@ test("the frame runs its own script without gaining the app origin", async ({ pa
   const srcdoc = await frame.getAttribute("srcdoc");
   expect(srcdoc).toMatch(/content="script-src 'nonce-[\w-]+'/);
 });
+
+test("a style block survives, and what it could fetch with does not", async ({ page }) => {
+  const threadId = await seedHtmlMessage(
+    `<style>.card{padding:20px;color:#b91c1c}.bad{background:url(https://tracker.example/p.gif)}</style>` +
+      `<div class="card">Styled by a block.</div>`,
+  );
+  await page.goto(`/t/${threadId}`);
+
+  const srcdoc = await page.locator('iframe[title="Message"]').getAttribute("srcdoc");
+  expect(srcdoc).toContain("padding:20px");
+  expect(srcdoc).not.toContain("tracker.example");
+});

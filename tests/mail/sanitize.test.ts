@@ -162,3 +162,69 @@ describe("quoted reply markers", () => {
     expect(clean('<div id="divRplyFwdMsg">x</div>')).toContain('id="divRplyFwdMsg"');
   });
 });
+
+describe("style blocks", () => {
+  it("keeps the rules a message needs to look like itself", () => {
+    const out = clean(`<style>.hdr{color:#333;padding:12px}</style><p class="hdr">x</p>`);
+    expect(out).toContain(".hdr{color:#333;padding:12px}");
+    expect(out).toContain('class="hdr"');
+  });
+
+  it("keeps a child combinator, which the parser could have escaped", () => {
+    expect(clean(`<style>.a > .b{color:red}</style>`)).toContain(".a > .b");
+  });
+
+  it("drops an import, which fetches a stylesheet", () => {
+    expect(clean(`<style>@import "https://x.test/t.css";.a{color:red}</style>`)).not.toContain(
+      "@import",
+    );
+  });
+
+  it("drops a font-face, which fetches a file", () => {
+    const out = clean(`<style>@font-face{font-family:E;src:url(https://x.test/e.woff)}</style>`);
+    expect(out).not.toContain("@font-face");
+    expect(out).not.toContain("x.test");
+  });
+
+  it("drops a declaration that fetches, keeping the rest of the rule", () => {
+    const out = clean(`<style>.a{color:red;background:url(https://x.test/p.gif)}</style>`);
+    expect(out).not.toContain("url(");
+    expect(out).toContain("color:red");
+  });
+
+  it("reaches a declaration inside a media query", () => {
+    const out = clean(`<style>@media screen{.a{color:red;background:url(https://x.test/p.gif)}}</style>`);
+    expect(out).toContain("@media screen");
+    expect(out).toContain("color:red");
+    expect(out).not.toContain("x.test");
+  });
+
+  it("drops the whole block when a fetch is spelled with an escape", () => {
+    // u\rl( is url( by the time a browser reads it.
+    const out = clean(`<style>.a{background:u\\rl(https://x.test/p.gif)}</style>`);
+    expect(out).toBe("<style></style>");
+  });
+
+  it("drops the whole block when a fetch is left unclosed", () => {
+    expect(clean(`<style>.a{background:url(https://x.test/p.gif}</style>`)).toBe(
+      "<style></style>",
+    );
+  });
+
+  it("drops a fetch hidden behind a comment", () => {
+    expect(clean(`<style>.a{color:red}/* @import "https://x.test/t.css"; */</style>`)).not.toContain(
+      "x.test",
+    );
+  });
+
+  it("does not let a closing tag inside the css smuggle markup", () => {
+    const out = clean(`<style>.a{content:"</style><script>steal()</script>"}</style>`);
+    expect(out).not.toMatch(/<script/i);
+    expect(out).not.toContain("steal()");
+  });
+
+  it("sanitises markup that escapes the block rather than passing it through", () => {
+    const out = clean(`<style>.a{content:"</style><img src="https://x.test/p.gif">"}</style>`);
+    expect(out).not.toContain("x.test");
+  });
+});
