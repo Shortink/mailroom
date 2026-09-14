@@ -85,6 +85,9 @@ export function sanitizeEmailHtml(html: string, options: SanitizeOptions) {
       td: ["colspan", "rowspan"],
       th: ["colspan", "rowspan"],
       font: ["color", "face", "size"],
+      // What marks a quoted reply, so it can be folded.
+      blockquote: ["type"],
+      div: ["id"],
     },
     allowedSchemes: ["http", "https", "mailto"],
     allowedStyles: { "*": ALLOWED_STYLES },

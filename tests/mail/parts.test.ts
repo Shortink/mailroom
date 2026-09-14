@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasRemoteImages, referencedCids } from "../../src/lib/mail/parts";
+import { hasQuotedReply, hasRemoteImages, quotedTextStart, referencedCids } from "../../src/lib/mail/parts";
 
 describe("referencedCids", () => {
   it("finds the ids a body draws", () => {
@@ -29,5 +29,35 @@ describe("hasRemoteImages", () => {
 
   it("is false for no body", () => {
     expect(hasRemoteImages(null)).toBe(false);
+  });
+});
+
+describe("hasQuotedReply", () => {
+  it("knows the three clients' markers", () => {
+    expect(hasQuotedReply('<div class="gmail_quote">On x wrote:</div>')).toBe(true);
+    expect(hasQuotedReply('<blockquote type="cite">old</blockquote>')).toBe(true);
+    expect(hasQuotedReply('<div id="divRplyFwdMsg">From: x</div>')).toBe(true);
+  });
+
+  it("leaves an ordinary body alone", () => {
+    expect(hasQuotedReply("<p>hi</p><blockquote>a quote, not a reply</blockquote>")).toBe(false);
+    expect(hasQuotedReply(null)).toBe(false);
+  });
+});
+
+describe("quotedTextStart", () => {
+  it("finds the attribution line", () => {
+    const text = "Thanks!\n\nOn Mon, Sep 7, 2026 at 11:40 AM Hasan wrote:\n> earlier";
+    expect(text.slice(0, quotedTextStart(text)).trimEnd()).toBe("Thanks!");
+  });
+
+  it("finds a bare quote", () => {
+    expect(quotedTextStart("ok\n> earlier\n> more")).toBe(2);
+  });
+
+  it("is -1 with nothing quoted, and 0 when it is all quote", () => {
+    expect(quotedTextStart("just a message")).toBe(-1);
+    expect(quotedTextStart("> all of it")).toBe(0);
+    expect(quotedTextStart(null)).toBe(-1);
   });
 });
