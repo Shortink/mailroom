@@ -216,6 +216,23 @@ export async function loadThread(threadId: string) {
   };
 }
 
+// One message's body and its attachments, for rendering it again with remote
+// images.
+export async function loadMessageHtml(messageId: string) {
+  const [message] = await db
+    .select({ htmlBody: messages.htmlBody })
+    .from(messages)
+    .where(and(eq(messages.id, messageId), visible));
+  if (!message?.htmlBody) return null;
+
+  const parts = await db
+    .select({ contentId: attachments.contentId, storageKey: attachments.storageKey })
+    .from(attachments)
+    .where(eq(attachments.messageId, messageId));
+
+  return { html: message.htmlBody, parts };
+}
+
 export async function markThreadRead(threadId: string) {
   const read = await db
     .update(messages)

@@ -8,12 +8,14 @@ import { deleteDraft, saveDraft, type DraftInput } from "@/lib/mail/drafts";
 import { retryFailed } from "@/lib/mail/reconcile";
 import { draft, outgoing } from "@/lib/mail/limits";
 import {
+  loadMessageHtml,
   markThreadRead,
   searchThreads,
   setArchived,
   type SearchScope,
 } from "@/lib/mail/queries";
 import { formatWhen } from "@/lib/format";
+import { renderHtml } from "@/lib/mail/render";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
 
 export interface SendInput {
@@ -126,6 +128,15 @@ export async function markRead(threadId: string) {
 
   await markThreadRead(threadId);
   revalidatePath("/", "layout");
+}
+
+// A message is first shown without remote images, since loading one tells the
+// sender the address is read. This loads them on request.
+export async function showImages(messageId: string) {
+  await requireUser();
+
+  const loaded = await loadMessageHtml(messageId);
+  return loaded ? renderHtml(loaded.html, loaded.parts, { remote: true }) : null;
 }
 
 export async function retryFailedMail() {

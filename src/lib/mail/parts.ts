@@ -5,3 +5,8 @@ export function referencedCids(html: string | null) {
   for (const match of (html ?? "").matchAll(/cid:([^"'\s>)]+)/g)) found.add(match[1]);
   return found;
 }
+
+// Whether a body would fetch from the sender if allowed to.
+export function hasRemoteImages(html: string | null) {
+  return /<img[^>]+src\s*=\s*["']?https?:/i.test(html ?? "");
+}

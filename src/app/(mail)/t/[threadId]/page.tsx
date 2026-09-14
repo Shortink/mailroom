@@ -4,11 +4,10 @@ import { MessageThread, type ThreadMessage } from "@/components/mail/MessageThre
 import { QuickReply, ThreadActions } from "@/components/mail/ThreadActions";
 import { requireUser } from "@/lib/auth/require";
 import { formatSize, formatStamp, snippet } from "@/lib/format";
-import { signAttachmentUrl } from "@/lib/mail/attachmentLink";
 import { addressColor, initials } from "@/lib/mail/identity";
-import { referencedCids } from "@/lib/mail/parts";
+import { hasRemoteImages, referencedCids } from "@/lib/mail/parts";
 import { loadThread } from "@/lib/mail/queries";
-import { sanitizeEmailHtml } from "@/lib/mail/sanitize";
+import { renderHtml } from "@/lib/mail/render";
 import { getStorage } from "@/lib/storage";
 
 export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
@@ -23,15 +22,6 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   );
 
   const storage = getStorage();
-  // The download list below sits in the page itself, so it needs no signature.
-  const cids = Object.fromEntries(
-    thread.attachments
-      .filter((file) => file.contentId)
-      .map((file) => [
-        file.contentId!,
-        signAttachmentUrl(storage.url(file.storageKey), file.storageKey),
-      ]),
-  );
 
   const messages: ThreadMessage[] = thread.messages.map((message) => {
     const outbound = message.direction === "outbound";
@@ -45,8 +35,9 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
       time: formatStamp(message.receivedAt),
       snippet: snippet(message.textBody),
       initials: outbound ? "You" : initials(message.fromName, message.fromAddress),
-      html: message.htmlBody ? sanitizeEmailHtml(message.htmlBody, { cids }) : null,
+      html: message.htmlBody ? renderHtml(message.htmlBody, thread.attachments) : null,
       text: message.textBody,
+      remoteImages: hasRemoteImages(message.htmlBody),
       files: thread.attachments
         .filter((file) => file.messageId === message.id)
         .filter((file) => !(file.contentId && drawn.has(file.contentId)))

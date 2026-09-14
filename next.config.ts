@@ -16,7 +16,9 @@ const securityHeaders = [
       // shipped policy must never carry unsafe-eval.
       `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data:",
+      // Remote images in mail load only after the reader asks, inside the
+      // sandboxed frame; https: is what lets that click work.
+      "img-src 'self' data: https:",
       // Message bodies render in a sandboxed iframe served from a blob/srcdoc.
       "frame-src 'self'",
       "frame-ancestors 'none'",
