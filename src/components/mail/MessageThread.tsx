@@ -4,6 +4,7 @@ import { useState } from "react";
 import { showImages } from "@/app/(mail)/actions";
 import { ClipIcon, DocIcon } from "@/components/icons";
 import { textIsEnough } from "@/lib/mail/body";
+import { QUOTE_SELECTOR, quotedTextStart } from "@/lib/mail/parts";
 
 export interface ThreadMessage {
   id: string;
@@ -16,6 +17,8 @@ export interface ThreadMessage {
   html: string | null;
   text: string | null;
   remoteImages: boolean;
+  // Whether the body carries the earlier messages of its thread.
+  quoted: boolean;
   files: { id: string; name: string; size: string; url: string }[];
 }
 
@@ -27,6 +30,9 @@ img{max-width:100%;height:auto}
 a{color:#1a56db}
 blockquote{margin:.5em 0 .5em .8em;padding-left:.8em;border-left:2px solid #ddd;color:#555}
 </style>`;
+
+// Folded until asked for, the way every client does it.
+const HIDE_QUOTE = `<style>${QUOTE_SELECTOR}{display:none}</style>`;
 
 export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
   // The newest message is the one you came to read; older ones stay folded.
@@ -67,6 +73,7 @@ export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
                 html={message.html}
                 text={message.text}
                 remoteImages={message.remoteImages}
+                quoted={message.quoted}
               />
 
               {message.files.length > 0 && (
@@ -125,20 +132,27 @@ function Body({
   html,
   text,
   remoteImages,
+  quoted,
 }: {
   id: string;
   html: string | null;
   text: string | null;
   remoteImages: boolean;
+  quoted: boolean;
 }) {
   const [withImages, setWithImages] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showQuoted, setShowQuoted] = useState(false);
 
   if (!html || textIsEnough(html, text)) {
+    const cut = showQuoted ? -1 : quotedTextStart(text);
     return (
-      <pre className="max-w-[680px] font-sans text-[14.5px] leading-[1.75] whitespace-pre-wrap text-ink2">
-        {text}
-      </pre>
+      <div>
+        <pre className="max-w-[680px] font-sans text-[14.5px] leading-[1.75] whitespace-pre-wrap text-ink2">
+          {cut > 0 ? text!.slice(0, cut).trimEnd() : text}
+        </pre>
+        {cut > 0 && <ShowQuoted onClick={() => setShowQuoted(true)} />}
+      </div>
     );
   }
 
@@ -169,10 +183,23 @@ function Body({
       <iframe
         sandbox="allow-popups allow-popups-to-escape-sandbox"
         title="Message"
-        srcDoc={BASE + (withImages ?? html)}
+        srcDoc={BASE + (quoted && !showQuoted ? HIDE_QUOTE : "") + (withImages ?? html)}
         className="w-full border-0"
         style={{ height: 320 }}
       />
+      {quoted && !showQuoted && <ShowQuoted onClick={() => setShowQuoted(true)} />}
     </div>
+  );
+}
+
+function ShowQuoted({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-2 rounded-md border border-line px-2 py-0.5 text-[12px] text-ink3 transition-colors hover:bg-hover"
+    >
+      Show quoted text
+    </button>
   );
 }

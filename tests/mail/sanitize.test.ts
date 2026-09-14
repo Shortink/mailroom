@@ -154,3 +154,11 @@ describe("mail layout styling", () => {
     expect(clean(`<td background="https://x.test/p.gif">x</td>`)).not.toContain("background=");
   });
 });
+
+describe("quoted reply markers", () => {
+  it("keeps what identifies a quoted reply", () => {
+    expect(clean('<div class="gmail_quote">x</div>')).toContain('class="gmail_quote"');
+    expect(clean('<blockquote type="cite">x</blockquote>')).toContain('type="cite"');
+    expect(clean('<div id="divRplyFwdMsg">x</div>')).toContain('id="divRplyFwdMsg"');
+  });
+});

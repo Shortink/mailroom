@@ -5,7 +5,7 @@ import { QuickReply, ThreadActions } from "@/components/mail/ThreadActions";
 import { requireUser } from "@/lib/auth/require";
 import { formatSize, formatStamp, snippet } from "@/lib/format";
 import { addressColor, initials } from "@/lib/mail/identity";
-import { hasRemoteImages, referencedCids } from "@/lib/mail/parts";
+import { hasQuotedReply, hasRemoteImages, referencedCids } from "@/lib/mail/parts";
 import { loadThread } from "@/lib/mail/queries";
 import { renderHtml } from "@/lib/mail/render";
 import { getStorage } from "@/lib/storage";
@@ -38,6 +38,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
       html: message.htmlBody ? renderHtml(message.htmlBody, thread.attachments) : null,
       text: message.textBody,
       remoteImages: hasRemoteImages(message.htmlBody),
+      quoted: hasQuotedReply(message.htmlBody),
       files: thread.attachments
         .filter((file) => file.messageId === message.id)
         .filter((file) => !(file.contentId && drawn.has(file.contentId)))
