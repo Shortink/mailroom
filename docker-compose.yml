@@ -12,6 +12,7 @@ services:
       retries: 10
 
   app:
+    image: ghcr.io/shortink/mailroom
     build: .
     depends_on:
       db:
