@@ -18,6 +18,11 @@ const ALLOWED_TAGS = [
   "span",
   "font",
   "center",
+  // Most mail keeps its rules in a block and puts only classes on the markup,
+  // so dropping this strips the message of its styling. It cannot execute: a
+  // closing tag inside the CSS ends the element at the parser, and what
+  // follows is sanitised as markup.
+  "style",
 ];
 
 const COLOR = [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i, /^[a-z]+$/i];
@@ -74,9 +79,42 @@ const ALLOWED_STYLES: Record<string, RegExp[]> = {
   opacity: [/^(0|1|0?\.\d+)$/],
 };
 
+// A browser reads an escape as the character it names, so u\rl( and url( are
+// the same thing to it and only one looks like a fetch. Detection runs on a
+// copy with the escapes resolved.
+function resolveEscapes(css: string) {
+  return css
+    .replace(/\\([0-9a-f]{1,6})\s?/gi, (_, hex: string) => {
+      const code = parseInt(hex, 16);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+    })
+    .replace(/\\(.)/g, "$1");
+}
+
+// A fetch is how a sender learns the message was opened. @import pulls a
+// stylesheet, @font-face pulls a file, and url() does it from anywhere a value
+// is allowed. Comments go first because they can hide all three.
+function cleanCss(css: string) {
+  const cleaned = css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/@import[^;]*;?/gi, "")
+    .replace(/@font-face\s*\{[^}]*\}/gi, "")
+    .replace(/[^;{}]*url\s*\([^)]*\)[^;{}]*;?/gi, "")
+    .trim();
+
+  // If anything still reads as a fetch it was written in a form the patterns
+  // above missed, so drop the lot.
+  return /url\s*\(|@import|@font-face/i.test(resolveEscapes(cleaned)) ? "" : cleaned;
+}
+
 export function sanitizeEmailHtml(html: string, options: SanitizeOptions) {
-  return sanitizeHtml(html, {
+  const clean = sanitizeHtml(html, {
     allowedTags: ALLOWED_TAGS,
+    // Keeps style content instead of dropping it, so the CSS can be cleaned
+    // below. The warning is about the tag escaping its element, which the
+    // parser does not allow.
+    allowVulnerableTags: true,
+    nonTextTags: ["script", "textarea", "option"],
     allowedAttributes: {
       "*": ["style", "class", "align", "valign", "width", "height", "bgcolor", "dir", "lang"],
       a: ["href", "target", "rel"],
@@ -110,4 +148,11 @@ export function sanitizeEmailHtml(html: string, options: SanitizeOptions) {
       },
     },
   });
+
+  // The parser has already fixed where each block starts and ends, so a
+  // closing tag here belongs to its own element.
+  return clean.replace(
+    /<style>([\s\S]*?)<\/style>/gi,
+    (_, css: string) => `<style>${cleanCss(css)}</style>`,
+  );
 }
