@@ -174,7 +174,7 @@ the MX record points at.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | yes | Any Postgres. Behind a pooler, use the pooled connection string. |
+| `DATABASE_URL` | without Docker | Any Postgres. Docker brings its own unless this is set. Behind a pooler, use the pooled connection string. |
 | `APP_URL` | yes | Public HTTPS URL. Resend delivers webhooks here. |
 | `SESSION_SECRET` | yes | 32+ characters. |
 | `RESEND_API_KEY` | to send or receive | Full access to receive through Resend; Sending access otherwise. See [Scoping the API key](#scoping-the-api-key). |
