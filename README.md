@@ -1,6 +1,7 @@
 # Mailroom
 
-Self-hosted email client built on [Resend Inbound](https://resend.com/features/inbound).
+Self-hosted email client. Receives through [Resend Inbound](https://resend.com/features/inbound)
+or [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
@@ -115,8 +116,9 @@ use.
 Resend keys carry a permission and an optional domain restriction, both set
 when you create the key.
 
-Mailroom needs **Full access**. A Sending access key can post a message but
-can't read one back, and receiving depends on reading. The webhook carries the
+Receiving through Resend needs **Full access**. A Sending access key can post a
+message but can't read one back, and receiving depends on reading. Receiving
+through Cloudflare instead, Sending access is enough. The webhook carries the
 envelope only, so the body and attachments are fetched from the receiving API
 afterwards. With a sending-only key, mail arrives with nothing in it.
 
@@ -127,6 +129,47 @@ Rotating the key is a restart with a new `RESEND_API_KEY`. Nothing is stored
 against the old one; inbound mail already in Postgres stays readable, since
 attachment bytes are downloaded during ingest rather than fetched on demand.
 
+## Receiving through Cloudflare instead
+
+Resend accepts whatever is sent to the domain. Cloudflare Email Routing checks
+SPF and DKIM first and refuses mail that fails both, so a forged sender never
+arrives. It also forwards the original message intact, where Mailroom's own
+forwarding has to send a new one from your address. If the domain is already
+on Cloudflare, this is the better way in. Sending still goes through Resend,
+which then only needs a Sending access key.
+
+The worker posts the whole message, so the app needs a host that accepts a
+25 MiB request body. Vercel and Lambda-based hosts cap it at a few megabytes and
+would bounce anything larger, so on those receive through Resend instead: its
+webhook is a small envelope and the body is fetched afterwards.
+
+1. Generate a secret and put it in `.env` as `INBOUND_SECRET`.
+
+   ```sh
+   node -e "console.log('INBOUND_SECRET='+require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. Deploy the worker and give it the same secret, the app's public URL, and
+   optionally the address that should receive a copy of everything.
+
+   ```sh
+   cd worker
+   npx wrangler deploy
+   npx wrangler secret put INBOUND_SECRET
+   npx wrangler secret put APP_URL
+   npx wrangler secret put FORWARD_TO
+   ```
+
+3. In the Cloudflare dashboard, enable Email Routing on the domain and add the
+   MX records it gives you. Set the catch-all action to "Send to a Worker" and
+   pick `mailroom-inbound`.
+
+4. Leave `FORWARD_TO` out of `.env`. The worker forwards instead, with the
+   sender's own signature still on the message.
+
+Both ways in can be configured at once; each message arrives by whichever one
+the MX record points at.
+
 ## Configuration
 
 | Variable | Required | Notes |
@@ -134,10 +177,11 @@ attachment bytes are downloaded during ingest rather than fetched on demand.
 | `DATABASE_URL` | yes | Any Postgres. Behind a pooler, use the pooled connection string. |
 | `APP_URL` | yes | Public HTTPS URL. Resend delivers webhooks here. |
 | `SESSION_SECRET` | yes | 32+ characters. |
-| `RESEND_API_KEY` | to send or receive | Must be a Full access key. See [Scoping the API key](#scoping-the-api-key). |
-| `RESEND_WEBHOOK_SECRET` | to receive | Signing secret of the received-mail webhook. |
+| `RESEND_API_KEY` | to send or receive | Full access to receive through Resend; Sending access otherwise. See [Scoping the API key](#scoping-the-api-key). |
+| `RESEND_WEBHOOK_SECRET` | to receive through Resend | Signing secret of the received-mail webhook. |
 | `RECONCILE_TOKEN` | for reconcile calls | Bearer token for `/api/tasks/reconcile`. 32+ characters. |
-| `FORWARD_TO` | no | Address that receives a copy of everything. |
+| `FORWARD_TO` | no | Address that receives a copy of everything. Leave unset when receiving through Cloudflare; the worker forwards instead. |
+| `INBOUND_SECRET` | to receive through Cloudflare | Shared with the worker. 32+ characters. |
 | `STORAGE_DRIVER` | yes | `fs`, `s3`, or `postgres`. |
 | `FS_STORAGE_PATH` | with `fs` | Directory for attachments. |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | with `s3` | `S3_ENDPOINT` covers R2, MinIO, and Backblaze. |
@@ -149,12 +193,14 @@ attachment bytes are downloaded during ingest rather than fetched on demand.
 ### Managed hosts
 
 Use Postgres from Neon or Supabase and the `s3` driver against R2, because these
-platforms have no writable filesystem. Point the Resend webhook at
-`<APP_URL>/api/webhooks/resend`.
+platforms have no writable filesystem. Receive through Resend and point its
+webhook at `<APP_URL>/api/webhooks/resend`; the Cloudflare worker posts whole
+messages, which these hosts cap at a few megabytes.
 
 Hosts that cap how long a response may run will drop the stream that carries new
 mail to open tabs. Mail still arrives; it shows on the next navigation rather
-than on its own.
+than on its own. Hosts that cap the size of a response (4.5 MB on Vercel) cannot
+serve an attachment larger than that.
 
 ### Docker
 
@@ -195,6 +241,11 @@ writes a `pending` message, and returns 200 immediately, then fetches the body
 and attachments afterwards. Returning early matters because Resend retries any
 non-2xx, and a slow fetch would otherwise produce duplicate deliveries. A unique
 constraint on the Resend message id makes retries harmless in any case.
+
+Mail received through Cloudflare arrives whole. The worker posts the raw
+message, the app parses it and finishes everything inside that request, and a
+non-2xx makes Cloudflare try again a few times before bouncing the sender. So
+there is no `pending` state on that path and nothing for the sweep to pick up.
 
 Attachment download URLs expire, so the bytes are copied into your storage at
 ingest rather than linked. Old mail keeps its files.
