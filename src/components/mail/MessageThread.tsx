@@ -59,6 +59,8 @@ export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
                     <a
                       key={file.id}
                       href={file.url}
+                      target="_blank"
+                      rel="noopener"
                       className="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-[12.5px] text-ink2 transition-colors hover:bg-hover"
                     >
                       <DocIcon className="size-3.5" />
