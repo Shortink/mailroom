@@ -260,8 +260,9 @@ Outbound mail is briefly incomplete by design. Resend assigns the real
 thread by the subject fallback.
 
 Incoming HTML is cleaned on the server before it is shown, then rendered inside
-a sandboxed iframe so it cannot reach the rest of the page. Remote images are
-blocked by default, because loading one tells the sender your address is real.
+a sandboxed iframe so it cannot reach the rest of the page. Remote images stay
+out until you ask for them, because loading one tells the sender your address is
+real.
 
 ## Development
 

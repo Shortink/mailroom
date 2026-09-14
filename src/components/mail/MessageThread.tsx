@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { showImages } from "@/app/(mail)/actions";
 import { ClipIcon, DocIcon } from "@/components/icons";
 import { textIsEnough } from "@/lib/mail/body";
 
@@ -14,8 +15,18 @@ export interface ThreadMessage {
   initials: string;
   html: string | null;
   text: string | null;
+  remoteImages: boolean;
   files: { id: string; name: string; size: string; url: string }[];
 }
+
+// The frame has no styles of its own, so without these it gets the browser
+// defaults. The message's own styling still wins.
+const BASE = `<style>
+body{margin:0;padding:2px 0;font:14.5px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1a1a1a;background:#fff;word-wrap:break-word}
+img{max-width:100%;height:auto}
+a{color:#1a56db}
+blockquote{margin:.5em 0 .5em .8em;padding-left:.8em;border-left:2px solid #ddd;color:#555}
+</style>`;
 
 export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
   // The newest message is the one you came to read; older ones stay folded.
@@ -51,7 +62,12 @@ export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
             </button>
 
             <div className="px-4 pb-4">
-              <Body html={message.html} text={message.text} />
+              <Body
+                id={message.id}
+                html={message.html}
+                text={message.text}
+                remoteImages={message.remoteImages}
+              />
 
               {message.files.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -104,7 +120,20 @@ function Avatar({ initials, size }: { initials: string; size: number }) {
   );
 }
 
-function Body({ html, text }: { html: string | null; text: string | null }) {
+function Body({
+  id,
+  html,
+  text,
+  remoteImages,
+}: {
+  id: string;
+  html: string | null;
+  text: string | null;
+  remoteImages: boolean;
+}) {
+  const [withImages, setWithImages] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
   if (!html || textIsEnough(html, text)) {
     return (
       <pre className="max-w-[680px] font-sans text-[14.5px] leading-[1.75] whitespace-pre-wrap text-ink2">
@@ -113,15 +142,37 @@ function Body({ html, text }: { html: string | null; text: string | null }) {
     );
   }
 
-  // An empty sandbox attribute blocks scripts, forms and same-origin access.
-  // The markup is already sanitized server-side.
+  async function load() {
+    setLoading(true);
+    setWithImages(await showImages(id));
+    setLoading(false);
+  }
+
+  // The sandbox blocks scripts, forms and same-origin access. The allowances
+  // let a link open a tab, and let that tab be an ordinary page rather than
+  // one that inherits the sandbox.
   return (
-    <iframe
-      sandbox=""
-      title="Message"
-      srcDoc={html}
-      className="w-full border-0"
-      style={{ height: 320 }}
-    />
+    <div>
+      {remoteImages && !withImages && (
+        <div className="mb-2 flex items-center gap-3 text-[12px] text-ink3">
+          <span>Images not loaded.</span>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-md border border-line px-2 py-0.5 text-ink2 transition-colors hover:bg-hover disabled:opacity-50"
+          >
+            Show images
+          </button>
+        </div>
+      )}
+      <iframe
+        sandbox=""
+        title="Message"
+        srcDoc={BASE + (withImages ?? html)}
+        className="w-full border-0"
+        style={{ height: 320 }}
+      />
+    </div>
   );
 }
