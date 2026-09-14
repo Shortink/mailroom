@@ -1,4 +1,5 @@
 import { requireEnv } from "../env";
+import { readUpTo } from "./stream";
 
 const API = "https://api.resend.com";
 
@@ -78,33 +79,10 @@ export function getAttachment(emailId: string, attachmentId: string) {
 }
 
 // Download URLs are short-lived, so bytes are fetched during ingest and stored.
-// The listed size is the sender's own claim, so the cap applies to the bytes
-// that arrive. Returns null for anything over.
 export async function downloadAttachment(url: string, limit: number) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Attachment download failed: ${response.status}`);
-  if (!response.body) return null;
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      total += value.length;
-      if (total > limit) return null;
-      chunks.push(value);
-    }
-  } finally {
-    // Cancelling a finished stream is a no-op; cancelling an abandoned one
-    // stops the transfer rather than draining it.
-    await reader.cancel().catch(() => {});
-  }
-
-  return Buffer.concat(chunks);
+  return readUpTo(response.body, limit);
 }
 
 export function sendEmail(input: SendInput) {
