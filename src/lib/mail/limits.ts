@@ -7,6 +7,8 @@ export const MAX_ADDRESS_FIELD = 1024;
 export const MAX_LABEL = 128;
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 20;
+// Cloudflare's inbound cap; nothing larger will arrive.
+export const MAX_INBOUND_BYTES = 25 * 1024 * 1024;
 // How long an ingest is left to run before the sweep treats it as abandoned.
 // Attachments are fetched one after another, so the work can take minutes, and
 // a shorter window would forward the same message twice.

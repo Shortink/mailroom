@@ -1,0 +1,8 @@
+{
+  "name": "mailroom-inbound",
+  "main": "index.js",
+  "compatibility_date": "2026-09-01",
+  // APP_URL, INBOUND_SECRET and FORWARD_TO are set with `wrangler secret put`
+  // rather than here, so this file carries nothing specific to a deployment.
+  "observability": { "enabled": true }
+}
