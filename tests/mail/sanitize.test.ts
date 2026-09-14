@@ -107,3 +107,50 @@ describe("CSS cannot fetch remote resources", () => {
     );
   });
 });
+
+// What a message needs to look like its sender meant, and the line that
+// still cannot be crossed: nothing that fetches.
+describe("mail layout styling", () => {
+  it("keeps what a button is made of", () => {
+    const out = clean(
+      `<a href="https://x.test" style="display:inline-block;background-color:#1a56db;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:Arial, sans-serif">Go</a>`,
+    );
+    expect(out).toContain("display:inline-block");
+    expect(out).toContain("border-radius:6px");
+    expect(out).toContain("background-color:#1a56db");
+    expect(out).toContain("font-family:Arial, sans-serif");
+  });
+
+  it("keeps table layout attributes", () => {
+    const out = clean(
+      `<table border="0" cellpadding="8" cellspacing="0"><tr><td bgcolor="#eeeeee" valign="top" align="center">x</td></tr></table>`,
+    );
+    expect(out).toContain('bgcolor="#eeeeee"');
+    expect(out).toContain('valign="top"');
+    expect(out).toContain('cellpadding="8"');
+  });
+
+  it("keeps borders and line height", () => {
+    const out = clean(`<div style="border:1px solid #ddd;line-height:1.6;letter-spacing:0.5px">x</div>`);
+    expect(out).toContain("border:1px solid #ddd");
+    expect(out).toContain("line-height:1.6");
+  });
+
+  it("still refuses anything that could fetch", () => {
+    const out = clean(
+      `<div style="background:url(https://x.test/p.gif);background-image:url(https://x.test/p.gif);list-style:url(https://x.test/p.gif);border:1px solid url(https://x.test/p.gif)">x</div>`,
+    );
+    expect(out).not.toContain("url(");
+  });
+
+  it("keeps positioning and behaviour out", () => {
+    const out = clean(`<div style="position:fixed;z-index:9;cursor:pointer;behavior:url(x)">x</div>`);
+    expect(out).not.toContain("position");
+    expect(out).not.toContain("z-index");
+    expect(out).not.toContain("behavior");
+  });
+
+  it("drops a background attribute, which is a url", () => {
+    expect(clean(`<td background="https://x.test/p.gif">x</td>`)).not.toContain("background=");
+  });
+});
