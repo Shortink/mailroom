@@ -4,6 +4,7 @@ import { MessageThread, type ThreadMessage } from "@/components/mail/MessageThre
 import { QuickReply, ThreadActions } from "@/components/mail/ThreadActions";
 import { requireUser } from "@/lib/auth/require";
 import { formatSize, formatStamp, snippet } from "@/lib/format";
+import { signAttachmentUrl } from "@/lib/mail/attachmentLink";
 import { addressColor, initials } from "@/lib/mail/identity";
 import { loadThread } from "@/lib/mail/queries";
 import { sanitizeEmailHtml } from "@/lib/mail/sanitize";
@@ -21,10 +22,14 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   );
 
   const storage = getStorage();
+  // The download list below sits in the page itself, so it needs no signature.
   const cids = Object.fromEntries(
     thread.attachments
       .filter((file) => file.contentId)
-      .map((file) => [file.contentId!, storage.url(file.storageKey)]),
+      .map((file) => [
+        file.contentId!,
+        signAttachmentUrl(storage.url(file.storageKey), file.storageKey),
+      ]),
   );
 
   const messages: ThreadMessage[] = thread.messages.map((message) => {
