@@ -17,7 +17,8 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-mailroom}@db:5432/mailroom
+      # The bundled Postgres unless .env names another one.
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:${POSTGRES_PASSWORD:-mailroom}@db:5432/mailroom}
       STORAGE_DRIVER: fs
       FS_STORAGE_PATH: /data/attachments
       APP_URL: ${APP_URL:-http://localhost:3000}
