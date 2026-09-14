@@ -24,6 +24,9 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
 
   const storage = getStorage();
   const zone = await readerZone();
+  // Named once per render and admitted by each frame policy, so the height
+  // reporter runs and nothing that arrived in a message does.
+  const nonce = crypto.randomUUID();
 
   const messages: ThreadMessage[] = thread.messages.map((message) => {
     const outbound = message.direction === "outbound";
@@ -123,7 +126,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
         />
       </div>
 
-      <MessageThread messages={messages} />
+      <MessageThread messages={messages} nonce={nonce} />
 
       {replyTo && (
         <QuickReply

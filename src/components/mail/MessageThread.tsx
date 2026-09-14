@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { showImages } from "@/app/(mail)/actions";
 import { ClipIcon, DocIcon } from "@/components/icons";
 import { textIsEnough } from "@/lib/mail/body";
@@ -34,7 +34,42 @@ blockquote{margin:.5em 0 .5em .8em;padding-left:.8em;border-left:2px solid #ddd;
 // Folded until asked for, the way every client does it.
 const HIDE_QUOTE = `<style>${QUOTE_SELECTOR}{display:none}</style>`;
 
-export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
+// The height a frame keeps until it reports its own, so a message whose
+// script never runs still reads.
+const UNMEASURED = 320;
+
+// The sender picks the height, so it has a ceiling.
+const TALLEST = 20000;
+
+// No same-origin access, so the frame sends its height instead of letting us
+// read it. Scripts are allowed for that and the policy admits only this nonce,
+// so anything that survived sanitising still cannot run.
+//
+// It measures the body, on load. The root element fills the frame and would
+// report back the height the frame already had, and a script in the head runs
+// before there is a body.
+function measure(nonce: string, images: boolean) {
+  const policy = [
+    `script-src 'nonce-${nonce}'`,
+    // The sanitiser strips these from the CSS. This catches what it misses.
+    "font-src 'none'",
+    `img-src 'self' data:${images ? " https:" : ""}`,
+  ].join("; ");
+
+  return `<meta http-equiv="Content-Security-Policy" content="${policy}">
+<script nonce="${nonce}">
+(function(){
+  var tell=function(){parent.postMessage({height:document.body.scrollHeight},"*")};
+  addEventListener("message",tell);
+  addEventListener("load",function(){
+    tell();
+    new ResizeObserver(tell).observe(document.body);
+  });
+})();
+</script>`;
+}
+
+export function MessageThread({ messages, nonce }: { messages: ThreadMessage[]; nonce: string }) {
   // The newest message is the one you came to read; older ones stay folded.
   const [expanded, setExpanded] = useState<string[]>(() =>
     messages.length ? [messages[messages.length - 1].id] : [],
@@ -74,6 +109,7 @@ export function MessageThread({ messages }: { messages: ThreadMessage[] }) {
                 text={message.text}
                 remoteImages={message.remoteImages}
                 quoted={message.quoted}
+                nonce={nonce}
               />
 
               {message.files.length > 0 && (
@@ -133,16 +169,42 @@ function Body({
   text,
   remoteImages,
   quoted,
+  nonce,
 }: {
   id: string;
   html: string | null;
   text: string | null;
   remoteImages: boolean;
   quoted: boolean;
+  nonce: string;
 }) {
   const [withImages, setWithImages] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showQuoted, setShowQuoted] = useState(false);
+  const [height, setHeight] = useState(UNMEASURED);
+  const frame = useRef<HTMLIFrameElement>(null);
+
+  // The frame has an opaque origin, so there is no origin to check. The
+  // sending window is the only way to tell its messages from anyone else's.
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.source !== frame.current?.contentWindow) return;
+
+      const reported = (event.data as { height?: unknown })?.height;
+      if (typeof reported === "number" && reported > 0) {
+        setHeight(Math.min(Math.ceil(reported), TALLEST));
+      }
+    }
+
+    addEventListener("message", onMessage);
+
+    // srcdoc is in the server HTML, so the frame usually loads and reports
+    // before this listener exists. Asking covers that order, the frame
+    // reporting on its own covers the other one.
+    frame.current?.contentWindow?.postMessage("height", "*");
+
+    return () => removeEventListener("message", onMessage);
+  }, []);
 
   if (!html || textIsEnough(html, text)) {
     const cut = showQuoted ? -1 : quotedTextStart(text);
@@ -162,9 +224,8 @@ function Body({
     setLoading(false);
   }
 
-  // The sandbox blocks scripts, forms and same-origin access. The allowances
-  // let a link open a tab, and let that tab be an ordinary page rather than
-  // one that inherits the sandbox.
+  // The popup allowances let a link open a tab, and let that tab be an
+  // ordinary page rather than one that inherits the sandbox.
   return (
     <div>
       {remoteImages && !withImages && (
@@ -181,11 +242,17 @@ function Body({
         </div>
       )}
       <iframe
-        sandbox="allow-popups allow-popups-to-escape-sandbox"
+        ref={frame}
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         title="Message"
-        srcDoc={BASE + (quoted && !showQuoted ? HIDE_QUOTE : "") + (withImages ?? html)}
+        srcDoc={
+          BASE +
+          measure(nonce, withImages !== null) +
+          (quoted && !showQuoted ? HIDE_QUOTE : "") +
+          (withImages ?? html)
+        }
         className="w-full border-0"
-        style={{ height: 320 }}
+        style={{ height }}
       />
       {quoted && !showQuoted && <ShowQuoted onClick={() => setShowQuoted(true)} />}
     </div>

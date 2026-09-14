@@ -63,3 +63,34 @@ export async function resetDatabase() {
     sql`update addresses set pinned = true where address in ('hi@example.com', 'billing@example.com', 'domains@example.com')`,
   );
 }
+
+// The sample above is all plain text and never reaches the sandboxed frame,
+// so a test about the frame seeds its own message.
+export async function seedHtmlMessage(html: string) {
+  const at = new Date();
+  const [thread] = await db
+    .insert(threads)
+    .values({
+      subject: "Rendered as html",
+      lastMessageAt: at,
+      participants: ["sender@html.example", "hi@example.com"],
+      messageCount: 1,
+    })
+    .returning();
+
+  await db.insert(messages).values({
+    threadId: thread.id,
+    direction: "inbound",
+    status: "complete",
+    subject: "Rendered as html",
+    textBody: "A plain part too short to stand in for the html.",
+    htmlBody: html,
+    fromAddress: "sender@html.example",
+    fromName: "HTML Sender",
+    deliveredTo: "hi@example.com",
+    receivedAt: at,
+    readAt: at,
+  });
+
+  return thread.id;
+}
