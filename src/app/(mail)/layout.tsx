@@ -5,11 +5,12 @@ import { PaneToolbar } from "@/components/mail/PaneToolbar";
 import { Rail } from "@/components/mail/Rail";
 import { SearchProvider } from "@/components/mail/SearchField";
 import { ShellFrame } from "@/components/mail/ShellFrame";
+import { Zone } from "@/components/mail/Zone";
 import { requireUser } from "@/lib/auth/require";
 import { findUser } from "@/lib/auth/users";
+import { formatClock } from "@/lib/format";
 import { countFailed, listInboxes } from "@/lib/mail/queries";
-
-const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+import { readerZone } from "@/lib/zone";
 
 export default async function MailLayout({
   children,
@@ -20,6 +21,7 @@ export default async function MailLayout({
 }) {
   const userId = await requireUser();
   const [rail, user, failed] = await Promise.all([listInboxes(), findUser(userId), countFailed()]);
+  const zone = await readerZone();
 
   const accounts = rail.named.map((inbox) => inbox.address);
 
@@ -38,6 +40,7 @@ export default async function MailLayout({
       />
 
       <LiveMail />
+      <Zone current={zone} />
 
       <SearchProvider>
         {/* The composer sits at frame level rather than inside the pane, so it
@@ -49,7 +52,7 @@ export default async function MailLayout({
             {...rail}
             failed={failed}
             user={user?.email ?? ""}
-            loadedAt={clock.format(new Date())}
+            loadedAt={formatClock(new Date(), zone)}
           />
 
           <div data-slot="list" className="flex min-w-0 flex-none max-md:min-h-0 max-md:flex-1">

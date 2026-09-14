@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
 import { AddressSettings } from "@/components/mail/AddressSettings";
 import { requireUser } from "@/lib/auth/require";
+import { formatDay, formatStamp, formatWhen } from "@/lib/format";
 import { loadAddress } from "@/lib/mail/addresses";
-import { formatStamp, formatWhen } from "@/lib/format";
-
-const day = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+import { readerZone } from "@/lib/zone";
 
 export default async function AddressSettingsPage({
   params,
@@ -17,13 +16,15 @@ export default async function AddressSettingsPage({
   const detail = await loadAddress(decodeURIComponent(address));
   if (!detail) notFound();
 
+  const zone = await readerZone();
+
   return (
     <AddressSettings
       detail={detail}
       when={{
-        firstSeen: detail.firstSeen ? day.format(detail.firstSeen) : "never",
-        lastActivity: detail.lastActivity ? formatWhen(detail.lastActivity) : "never",
-        lastActivityExact: detail.lastActivity ? formatStamp(detail.lastActivity) : "no mail yet",
+        firstSeen: detail.firstSeen ? formatDay(detail.firstSeen, zone) : "never",
+        lastActivity: detail.lastActivity ? formatWhen(detail.lastActivity, zone) : "never",
+        lastActivityExact: detail.lastActivity ? formatStamp(detail.lastActivity, zone) : "no mail yet",
       }}
     />
   );

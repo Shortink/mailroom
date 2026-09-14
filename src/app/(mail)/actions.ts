@@ -17,6 +17,7 @@ import {
 import { formatWhen } from "@/lib/format";
 import { renderHtml } from "@/lib/mail/render";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
+import { readerZone } from "@/lib/zone";
 
 export interface SendInput {
   draftId?: string;
@@ -111,13 +112,14 @@ export async function searchMail(query: string, scope: SearchScope): Promise<Sea
   if (!query.trim()) return [];
 
   const rows = await searchThreads(query.trim(), scope);
+  const zone = await readerZone();
 
   return rows.map((row) => ({
     id: row.id,
     sender: row.sender,
     subject: row.subject || "(no subject)",
     address: row.address,
-    time: formatWhen(row.at),
+    time: formatWhen(row.at, zone),
   }));
 }
 
