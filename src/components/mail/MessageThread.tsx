@@ -167,7 +167,7 @@ function Body({
         </div>
       )}
       <iframe
-        sandbox=""
+        sandbox="allow-popups allow-popups-to-escape-sandbox"
         title="Message"
         srcDoc={BASE + (withImages ?? html)}
         className="w-full border-0"
