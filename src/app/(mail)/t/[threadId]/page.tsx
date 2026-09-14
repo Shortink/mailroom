@@ -9,6 +9,7 @@ import { hasQuotedReply, hasRemoteImages, referencedCids } from "@/lib/mail/part
 import { loadThread } from "@/lib/mail/queries";
 import { renderHtml } from "@/lib/mail/render";
 import { getStorage } from "@/lib/storage";
+import { readerZone } from "@/lib/zone";
 
 export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
   await requireUser();
@@ -22,6 +23,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   );
 
   const storage = getStorage();
+  const zone = await readerZone();
 
   const messages: ThreadMessage[] = thread.messages.map((message) => {
     const outbound = message.direction === "outbound";
@@ -32,7 +34,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
       name: outbound ? "You" : (message.fromName ?? message.fromAddress ?? "Unknown sender"),
       address: message.fromAddress ?? "",
       to: (outbound ? message.to[0] : message.deliveredTo) ?? "",
-      time: formatStamp(message.receivedAt),
+      time: formatStamp(message.receivedAt, zone),
       snippet: snippet(message.textBody),
       initials: outbound ? "You" : initials(message.fromName, message.fromAddress),
       html: message.htmlBody ? renderHtml(message.htmlBody, thread.attachments) : null,

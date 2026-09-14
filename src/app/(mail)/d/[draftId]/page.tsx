@@ -3,6 +3,7 @@ import { DraftPreview } from "@/components/mail/DraftPreview";
 import { requireUser } from "@/lib/auth/require";
 import { formatStamp } from "@/lib/format";
 import { loadDraft } from "@/lib/mail/drafts";
+import { readerZone } from "@/lib/zone";
 
 export default async function DraftPage({ params }: { params: Promise<{ draftId: string }> }) {
   await requireUser();
@@ -21,7 +22,7 @@ export default async function DraftPage({ params }: { params: Promise<{ draftId:
         subject: draft.subject,
         body: draft.body,
       }}
-      saved={formatStamp(draft.updatedAt)}
+      saved={formatStamp(draft.updatedAt, await readerZone())}
     />
   );
 }

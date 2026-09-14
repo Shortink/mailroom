@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/require";
 import { formatWhen, snippet } from "@/lib/format";
 import { addressColor, initials, localPart } from "@/lib/mail/identity";
 import { listThreads, type Box } from "@/lib/mail/queries";
+import { readerZone } from "@/lib/zone";
 import { SearchField } from "./SearchField";
 import { ThreadRows, type ListItem } from "./ThreadRows";
 
@@ -25,6 +26,7 @@ export async function ThreadList({ box = "inbox", address, unreadOnly, before }:
   await requireUser();
 
   const { threads, nextCursor } = await listThreads({ box, address, unreadOnly, before });
+  const zone = await readerZone();
 
   const items: ListItem[] = threads.map((thread) => {
     // Sent is identified by the address it left from; everything else by the
@@ -35,7 +37,7 @@ export async function ThreadList({ box = "inbox", address, unreadOnly, before }:
       id: thread.id,
       sender: thread.fromName ?? thread.from ?? "Unknown sender",
       initials: initials(thread.fromName, thread.from),
-      time: formatWhen(thread.lastMessageAt),
+      time: formatWhen(thread.lastMessageAt, zone),
       subject: thread.subject || "(no subject)",
       snippet: snippet(thread.snippet, 140),
       address: shown,
