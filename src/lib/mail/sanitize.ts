@@ -17,33 +17,77 @@ const ALLOWED_TAGS = [
   "th",
   "span",
   "font",
+  "center",
 ];
+
+const COLOR = [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i, /^[a-z]+$/i];
+const LENGTH = [/^-?\d+(\.\d+)?(px|em|rem|pt|%)?$/, /^auto$/];
+const LENGTHS = [/^(-?\d+(\.\d+)?(px|em|rem|pt|%)?\s*){1,4}$/, /^auto$/];
+// A width, a style and a colour, in any order.
+const BORDER = [/^(\s*(\d+(\.\d+)?(px|em|rem|pt)?|none|solid|dashed|dotted|double|#[0-9a-f]{3,8}|rgba?\([\d\s,.%]+\)|[a-z]+))+$/i];
+
+// A style can only affect the message it belongs to, since the frame is
+// sandboxed. What is kept out is anything that could fetch: nothing here
+// accepts a url().
+const ALLOWED_STYLES: Record<string, RegExp[]> = {
+  color: COLOR,
+  "background-color": COLOR,
+  "border-color": COLOR,
+  border: BORDER,
+  "border-top": BORDER,
+  "border-right": BORDER,
+  "border-bottom": BORDER,
+  "border-left": BORDER,
+  "border-width": LENGTHS,
+  "border-style": [/^(none|solid|dashed|dotted|double)$/],
+  "border-radius": LENGTHS,
+  "border-collapse": [/^(collapse|separate)$/],
+  "border-spacing": LENGTHS,
+  display: [/^(block|inline|inline-block|table|table-row|table-cell|none)$/],
+  width: LENGTH,
+  height: LENGTH,
+  "max-width": LENGTH,
+  "min-width": LENGTH,
+  "max-height": LENGTH,
+  padding: LENGTHS,
+  "padding-top": LENGTH,
+  "padding-right": LENGTH,
+  "padding-bottom": LENGTH,
+  "padding-left": LENGTH,
+  margin: LENGTHS,
+  "margin-top": LENGTH,
+  "margin-right": LENGTH,
+  "margin-bottom": LENGTH,
+  "margin-left": LENGTH,
+  "text-align": [/^(left|right|center|justify)$/],
+  "vertical-align": [/^(top|middle|bottom|baseline)$/],
+  "font-family": [/^[\w\s,'"-]+$/],
+  "font-size": [/^\d+(\.\d+)?(px|em|rem|pt|%)$/],
+  "font-weight": [/^(bold|bolder|lighter|normal|[1-9]00)$/],
+  "font-style": [/^(italic|normal)$/],
+  "line-height": [/^\d+(\.\d+)?(px|em|rem|pt|%)?$/, /^normal$/],
+  "letter-spacing": LENGTH,
+  "text-decoration": [/^(underline|line-through|none)$/],
+  "text-transform": [/^(uppercase|lowercase|capitalize|none)$/],
+  "white-space": [/^(normal|nowrap|pre|pre-wrap|pre-line)$/],
+  "word-break": [/^(normal|break-all|break-word)$/],
+  opacity: [/^(0|1|0?\.\d+)$/],
+};
 
 export function sanitizeEmailHtml(html: string, options: SanitizeOptions) {
   return sanitizeHtml(html, {
     allowedTags: ALLOWED_TAGS,
     allowedAttributes: {
-      "*": ["style", "class", "align", "width", "height", "colspan", "rowspan"],
+      "*": ["style", "class", "align", "valign", "width", "height", "bgcolor", "dir", "lang"],
       a: ["href", "target", "rel"],
       img: ["src", "alt", "width", "height"],
+      table: ["border", "cellpadding", "cellspacing", "role"],
+      td: ["colspan", "rowspan"],
+      th: ["colspan", "rowspan"],
+      font: ["color", "face", "size"],
     },
     allowedSchemes: ["http", "https", "mailto"],
-    // Without an explicit allowlist sanitize-html passes every declaration
-    // through, so background:url() would fetch remotely and defeat the image
-    // blocking below. Nothing here accepts a url().
-    allowedStyles: {
-      "*": {
-        color: [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i, /^[a-z]+$/i],
-        "background-color": [/^#[0-9a-f]{3,8}$/i, /^rgba?\([\d\s,.%]+\)$/i, /^[a-z]+$/i],
-        "text-align": [/^(left|right|center|justify)$/],
-        "font-weight": [/^(bold|bolder|lighter|normal|[1-9]00)$/],
-        "font-style": [/^(italic|normal)$/],
-        "font-size": [/^\d+(\.\d+)?(px|em|rem|pt|%)$/],
-        "text-decoration": [/^(underline|line-through|none)$/],
-        padding: [/^[\d.\s]+(px|em|rem|%)?$/],
-        margin: [/^[\d.\s]+(px|em|rem|%)?$/],
-      },
-    },
+    allowedStyles: { "*": ALLOWED_STYLES },
     allowedSchemesByTag: { img: ["http", "https", "cid"] },
     transformTags: {
       a: (tagName, attribs) => ({
