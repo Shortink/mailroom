@@ -14,6 +14,28 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
+test("the rail collapses and is still collapsed after a reload", async ({ page }) => {
+  const rail = page.locator("aside");
+  await expect(rail).toHaveCSS("width", "238px");
+
+  await page.getByRole("button", { name: "Collapse the sidebar" }).click();
+  await expect(rail).toHaveCSS("width", "64px");
+
+  // The choice is a cookie so the server renders the narrow rail directly,
+  // rather than the wide one snapping shut once React arrives.
+  await page.reload();
+  await expect(rail).toHaveCSS("width", "64px");
+  await expect(page.getByRole("button", { name: "Expand the sidebar" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Expand the sidebar" }).click();
+  await expect(rail).toHaveCSS("width", "238px");
+});
+
+test("a collapsed target names itself, since nothing is written next to it", async ({ page }) => {
+  await page.getByRole("button", { name: "Collapse the sidebar" }).click();
+  await expect(page.getByRole("link", { name: "All mail" })).toHaveAttribute("title", "All mail");
+});
+
 test("the raw headers drawer opens on the message that carried them", async ({ page }) => {
   const threadId = await seedHtmlMessage("<p>With headers.</p>", {
     headers: { "message-id": "<abc@html.example>", "return-path": "bounce@html.example" },
