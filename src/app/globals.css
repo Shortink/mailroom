@@ -31,9 +31,15 @@
   --composer-shadow: 0 -20px 50px -22px rgb(0 0 0 / 0.6);
   --toast-shadow: 0 22px 46px -20px rgb(0 0 0 / 0.6);
 
-  --ok: oklch(0.72 0.14 146);
-  --warn: oklch(0.78 0.13 88);
+  --ok: oklch(0.52 0.13 155);
+  --ok-bg: oklch(0.72 0.13 155 / 0.13);
+  --warn: oklch(0.5 0.12 72);
+  --warn-bg: oklch(0.78 0.14 72 / 0.18);
+  --warn-line: oklch(0.7 0.14 72 / 0.34);
   --err: oklch(0.68 0.16 18);
+
+  /* Inset wells: raw headers, the render-path strip. */
+  --sunk: oklch(0.45 0.03 var(--h) / 0.05);
 
   color-scheme: light;
 }
@@ -64,6 +70,13 @@
 
     --window-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.7);
 
+    --ok: oklch(0.84 0.1 155);
+    --ok-bg: oklch(0.72 0.13 155 / 0.16);
+    --warn: oklch(0.88 0.11 72);
+    --warn-bg: oklch(0.78 0.14 72 / 0.2);
+    --warn-line: oklch(0.78 0.14 72 / 0.32);
+    --sunk: oklch(0 0 0 / 0.18);
+
     color-scheme: dark;
   }
 }
@@ -84,8 +97,12 @@
   --color-accent-soft: var(--accent-soft);
   --color-btn-ink: var(--btn-ink);
   --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
   --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-line: var(--warn-line);
   --color-err: var(--err);
+  --color-sunk: var(--sunk);
 
   --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;

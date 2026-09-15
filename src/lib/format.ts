@@ -61,3 +61,40 @@ export function snippet(text: string | null, max = 120) {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? flat.slice(0, max) + "…" : flat;
 }
+
+const ago = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
+
+const STEPS = [
+  ["minute", 60],
+  ["hour", 60],
+  ["day", 24],
+  ["month", 30],
+  ["year", 12],
+] as const;
+
+// How long ago needs no zone: it is a duration, not a point in time.
+export function formatAgo(value: Date, now = new Date()) {
+  let amount = (value.getTime() - now.getTime()) / 1000;
+  let unit: Intl.RelativeTimeFormatUnit = "second";
+
+  for (const [next, size] of STEPS) {
+    if (Math.abs(amount) < size) break;
+    amount /= size;
+    unit = next;
+  }
+
+  return ago.format(Math.round(amount), unit);
+}
+
+// Expanded messages say exactly when, down to the second and the named zone.
+export function formatExact(value: Date, zone: string) {
+  return formatter(zone, "exact", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(value);
+}

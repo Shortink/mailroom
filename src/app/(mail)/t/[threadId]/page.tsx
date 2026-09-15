@@ -1,15 +1,29 @@
 import { notFound } from "next/navigation";
 import { MarkRead } from "@/components/mail/MarkRead";
-import { MessageThread, type ThreadMessage } from "@/components/mail/MessageThread";
+import {
+  MessageThread,
+  type ThreadFile,
+  type ThreadMessage,
+} from "@/components/mail/MessageThread";
 import { QuickReply, ThreadActions } from "@/components/mail/ThreadActions";
 import { requireUser } from "@/lib/auth/require";
-import { formatSize, formatStamp, snippet } from "@/lib/format";
+import { formatAgo, formatExact, formatSize, snippet } from "@/lib/format";
+import { authentication } from "@/lib/mail/auth";
+import { shownHeaders } from "@/lib/mail/headers";
 import { addressColor, initials } from "@/lib/mail/identity";
 import { hasQuotedReply, hasRemoteImages, referencedCids } from "@/lib/mail/parts";
 import { loadThread } from "@/lib/mail/queries";
 import { renderHtml } from "@/lib/mail/render";
 import { getStorage } from "@/lib/storage";
 import { readerZone } from "@/lib/zone";
+
+// Only these types are served inline, so only these can show a thumbnail.
+const DRAWABLE = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+function extension(filename: string) {
+  const dot = filename.lastIndexOf(".");
+  return dot > 0 ? filename.slice(dot + 1, dot + 6).toUpperCase() : "FILE";
+}
 
 export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
   await requireUser();
@@ -32,27 +46,35 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
     const outbound = message.direction === "outbound";
     const drawn = referencedCids(message.htmlBody);
 
+    const files: ThreadFile[] = thread.attachments
+      .filter((file) => file.messageId === message.id)
+      .filter((file) => !(file.contentId && drawn.has(file.contentId)))
+      .map((file) => ({
+        id: file.id,
+        name: file.filename,
+        size: formatSize(file.sizeBytes),
+        url: storage.url(file.storageKey),
+        image: DRAWABLE.includes(file.contentType.split(";")[0].trim().toLowerCase()),
+        extension: extension(file.filename),
+      }));
+
     return {
       id: message.id,
       name: outbound ? "You" : (message.fromName ?? message.fromAddress ?? "Unknown sender"),
-      address: message.fromAddress ?? "",
+      address: outbound ? (message.deliveredTo ?? "") : (message.fromAddress ?? ""),
       to: (outbound ? message.to[0] : message.deliveredTo) ?? "",
-      time: formatStamp(message.receivedAt, zone),
+      ago: formatAgo(message.receivedAt),
+      exact: formatExact(message.receivedAt, zone),
       snippet: snippet(message.textBody),
       initials: outbound ? "You" : initials(message.fromName, message.fromAddress),
+      outbound,
+      auth: authentication(message),
+      headers: shownHeaders(message.headers),
       html: message.htmlBody ? renderHtml(message.htmlBody, thread.attachments) : null,
       text: message.textBody,
       remoteImages: hasRemoteImages(message.htmlBody),
       quoted: hasQuotedReply(message.htmlBody),
-      files: thread.attachments
-        .filter((file) => file.messageId === message.id)
-        .filter((file) => !(file.contentId && drawn.has(file.contentId)))
-        .map((file) => ({
-          id: file.id,
-          name: file.filename,
-          size: formatSize(file.sizeBytes),
-          url: storage.url(file.storageKey),
-        })),
+      files,
     };
   });
 
@@ -68,54 +90,32 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   const newSender = inbound.length > 1 && Boolean(replyTo) && !earlier.has(replyTo);
   const replySubject = thread.subject.startsWith("Re: ") ? thread.subject : `Re: ${thread.subject}`;
 
-  const people = [...new Set(inbound.map((message) => message.fromName ?? message.fromAddress))]
-    .filter(Boolean)
-    .slice(0, 2) as string[];
+  const count = `${thread.messages.length} ${thread.messages.length === 1 ? "message" : "messages"}`;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-8 py-6 scroll-clean">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 scroll-clean">
       <MarkRead threadId={thread.id} unread={unread} />
 
-      <div className="flex flex-none flex-wrap items-center gap-2">
-        {replyFrom && (
-          <span className="flex items-center gap-2 rounded-full bg-chip px-2.5 py-1 text-[11.5px]">
-            <span
-              className="size-[7px] rounded-full"
-              style={{ background: addressColor(replyFrom) }}
-            />
-            <span className="font-mono">{replyFrom}</span>
-          </span>
-        )}
-        <span className="font-mono text-[11px] text-ink3">
-          {thread.messages.length} {thread.messages.length === 1 ? "message" : "messages"}
-        </span>
-        {newSender && (
-          <span className="rounded-full bg-chip px-2.5 py-1 text-[11.5px] text-ink2">
-            First message here from <span className="font-mono">{replyTo}</span>. A reply goes to
-            them.
-          </span>
-        )}
-      </div>
-
-      <h1 className="max-w-[720px] flex-none text-[27px] leading-[1.2] font-semibold tracking-[-0.02em] text-pretty">
-        {thread.subject || "(no subject)"}
-      </h1>
-
-      <div className="flex flex-none items-center gap-3">
-        <span className="flex flex-none -space-x-2.5">
-          {people.map((person) => (
-            <span
-              key={person}
-              className="flex size-[30px] items-center justify-center rounded-full border-2 border-bg text-[10.5px] font-semibold text-white"
-              style={{ background: "var(--brand)" }}
-            >
-              {initials(person, null)}
-            </span>
-          ))}
-        </span>
-        <span className="truncate text-[13px] text-ink2">
-          {people.length > 0 ? `${people.join(", ")} and you` : "You"}
-        </span>
+      {/* Pinned so a long thread keeps its actions in reach. The negative
+          margins carry it across the padding the column scrolls inside. */}
+      <div className="sticky top-0 z-10 -mx-8 flex flex-none items-center gap-4 border-b border-line bg-panel2 px-8 py-[15px] backdrop-blur-[20px]">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            {replyFrom && (
+              <span
+                className="size-[7px] flex-none rounded-full"
+                style={{ background: addressColor(replyFrom) }}
+              />
+            )}
+            <h1 className="truncate text-[15px] font-semibold tracking-[-0.01em]">
+              {thread.subject || "(no subject)"}
+            </h1>
+          </div>
+          <p className="mt-0.5 truncate font-mono text-[10px] text-ink3">
+            {count}
+            {replyFrom && ` · ${replyFrom}`}
+          </p>
+        </div>
 
         <ThreadActions
           threadId={thread.id}
@@ -126,17 +126,26 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
         />
       </div>
 
-      <MessageThread messages={messages} nonce={nonce} />
+      <div className="flex flex-none flex-col gap-4 py-5">
+        {newSender && (
+          <p className="flex-none rounded-full bg-chip px-2.5 py-1 text-[11.5px] text-ink2">
+            First message here from <span className="font-mono">{replyTo}</span>. A reply goes to
+            them.
+          </p>
+        )}
 
-      {replyTo && (
-        <QuickReply
-          threadId={thread.id}
-          replyFrom={replyFrom}
-          replyTo={replyTo}
-          replySubject={replySubject}
-          initials="You"
-        />
-      )}
+        <MessageThread messages={messages} nonce={nonce} />
+
+        {replyTo && (
+          <QuickReply
+            threadId={thread.id}
+            replyFrom={replyFrom}
+            replyTo={replyTo}
+            replySubject={replySubject}
+            initials="You"
+          />
+        )}
+      </div>
     </div>
   );
 }
