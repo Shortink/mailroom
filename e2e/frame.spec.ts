@@ -36,6 +36,20 @@ test("a short message gets a frame that fits it", async ({ page }) => {
   expect(await frameHeight(page)).toBeLessThan(120);
 });
 
+test("the frame is tall enough for its own document, so nothing scrolls", async ({ page }) => {
+  const threadId = await seedHtmlMessage("<p>A couple of lines.</p><p>And another.</p>");
+  await page.goto(`/t/${threadId}`);
+  await frameHeight(page);
+
+  // Padding on the iframe element comes out of the height set on it, which left
+  // the document a few pixels taller than the viewport showing it.
+  const inner = page.frames().find((f) => f.url().startsWith("about:srcdoc"))!;
+  const fits = await inner.evaluate(
+    () => document.body.scrollHeight <= document.documentElement.clientHeight,
+  );
+  expect(fits).toBe(true);
+});
+
 test("a long message gets a frame taller than the old fixed one", async ({ page }) => {
   const paragraphs = Array.from({ length: 60 }, (_, i) => `<p>Paragraph ${i} of a long one.</p>`);
   const threadId = await seedHtmlMessage(paragraphs.join(""));
