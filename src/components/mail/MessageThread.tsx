@@ -54,7 +54,7 @@ const SHEET_INK = "oklch(0.52 0.015 285)";
 // The frame has no styles of its own, so without these it gets the browser
 // defaults. The message's own styling still wins.
 const BASE = `<style>
-body{margin:0;padding:2px 0;font:14.5px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1a1a1a;background:transparent;word-wrap:break-word}
+body{margin:0;padding:12px 16px;font:14.5px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1a1a1a;background:transparent;word-wrap:break-word}
 img{max-width:100%;height:auto}
 a{color:#1a56db}
 blockquote{margin:.5em 0 .5em .8em;padding-left:.8em;border-left:2px solid #ddd;color:#555}
@@ -223,7 +223,7 @@ function Expanded({
           style={{ background: "var(--accent-soft)" }}
         >
           <SendIcon className="size-3" />
-          sent from {message.to} · composed as plain text · stored on this instance
+          sent from {message.address} · composed as plain text · stored on this instance
         </div>
       )}
     </article>
@@ -387,7 +387,7 @@ function Body({ message, nonce }: { message: ThreadMessage; nonce: string }) {
                   (message.quoted && !showQuoted ? HIDE_QUOTE : "") +
                   (withImages ?? message.html)
                 }
-                className="w-full border-0 px-4 pt-3"
+                className="w-full border-0"
                 style={{ height, colorScheme: "light" }}
               />
               <div
