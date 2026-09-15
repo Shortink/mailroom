@@ -116,11 +116,19 @@ use.
 Resend keys carry a permission and an optional domain restriction, both set
 when you create the key.
 
-Receiving through Resend needs **Full access**. A Sending access key can post a
-message but can't read one back, and receiving depends on reading. Receiving
-through Cloudflare instead, Sending access is enough. The webhook carries the
-envelope only, so the body and attachments are fetched from the receiving API
-afterwards. With a sending-only key, mail arrives with nothing in it.
+**Full access.** A Sending access key can post a message but can't read one
+back, and both halves of Mailroom read.
+
+Receiving through Resend fetches the body and attachments from the API after
+the webhook, which carries the envelope only. With a sending-only key, mail
+arrives with nothing in it.
+
+Sending reads the message back to learn the `Message-ID` the server assigned,
+which is the header a reply quotes to thread against. With a sending-only key
+the message goes out and is delivered, but the read is refused, so it never
+completes: it stays pending until it runs out of attempts, and a reply to it
+threads by subject rather than by header. This applies however you receive,
+Cloudflare included.
 
 You can restrict the key to the domain you send from. The restriction doesn't
 affect receiving.
@@ -136,7 +144,7 @@ SPF and DKIM first and refuses mail that fails both, so a forged sender never
 arrives. It also forwards the original message intact, where Mailroom's own
 forwarding has to send a new one from your address. If the domain is already
 on Cloudflare, this is the better way in. Sending still goes through Resend,
-which then only needs a Sending access key.
+and still needs a Full access key.
 
 The worker posts the whole message, so the app needs a host that accepts a
 25 MiB request body. Vercel and Lambda-based hosts cap it at a few megabytes and
@@ -177,7 +185,7 @@ the MX record points at.
 | `DATABASE_URL` | without Docker | Any Postgres. Docker brings its own unless this is set. Behind a pooler, use the pooled connection string. |
 | `APP_URL` | yes | Public HTTPS URL. Resend delivers webhooks here. |
 | `SESSION_SECRET` | yes | 32+ characters. |
-| `RESEND_API_KEY` | to send or receive | Full access to receive through Resend; Sending access otherwise. See [Scoping the API key](#scoping-the-api-key). |
+| `RESEND_API_KEY` | to send or receive | Full access. Sending access can't read a message back, which sending and receiving both need. See [Scoping the API key](#scoping-the-api-key). |
 | `RESEND_WEBHOOK_SECRET` | to receive through Resend | Signing secret of the received-mail webhook. |
 | `RECONCILE_TOKEN` | for reconcile calls | Bearer token for `/api/tasks/reconcile`. 32+ characters. |
 | `FORWARD_TO` | no | Address that receives a copy of everything. Leave unset when receiving through Cloudflare; the worker forwards instead. |
