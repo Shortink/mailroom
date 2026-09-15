@@ -66,7 +66,10 @@ export async function resetDatabase() {
 
 // The sample above is all plain text and never reaches the sandboxed frame,
 // so a test about the frame seeds its own message.
-export async function seedHtmlMessage(html: string) {
+export async function seedHtmlMessage(
+  html: string,
+  extra: { headers?: Record<string, string>; dmarc?: string } = {},
+) {
   const at = new Date();
   const [thread] = await db
     .insert(threads)
@@ -85,6 +88,8 @@ export async function seedHtmlMessage(html: string) {
     subject: "Rendered as html",
     textBody: "A plain part too short to stand in for the html.",
     htmlBody: html,
+    headers: extra.headers ?? null,
+    dmarc: extra.dmarc ?? null,
     fromAddress: "sender@html.example",
     fromName: "HTML Sender",
     deliveredTo: "hi@example.com",

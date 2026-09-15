@@ -113,3 +113,41 @@ export const SettingsIcon = icon(
     <circle cx="10" cy="11" r="1.7" />
   </>,
 );
+
+export const ChevronUpIcon = icon(<path d="M4 9.8 8 6l4 3.8" />);
+
+export const ShieldIcon = icon(
+  <>
+    <path d="M8 2 3.5 3.8v4c0 2.8 1.9 5.2 4.5 6.2 2.6-1 4.5-3.4 4.5-6.2v-4z" />
+    <path d="M6 7.8 7.4 9.2 10 6.4" />
+  </>,
+);
+
+export const ShieldAlertIcon = icon(
+  <>
+    <path d="M8 2 3.5 3.8v4c0 2.8 1.9 5.2 4.5 6.2 2.6-1 4.5-3.4 4.5-6.2v-4z" />
+    <path d="M8 5.4v3M8 10.8v.1" />
+  </>,
+);
+
+export const BracesIcon = icon(
+  <>
+    <path d="M6.4 2.5c-1.3 0-1.6.7-1.6 1.8v1.4c0 1-.4 1.6-1.3 1.8v.2c.9.2 1.3.8 1.3 1.8v1.4c0 1.1.3 1.8 1.6 1.8" />
+    <path d="M9.6 2.5c1.3 0 1.6.7 1.6 1.8v1.4c0 1 .4 1.6 1.3 1.8v.2c-.9.2-1.3.8-1.3 1.8v1.4c0 1.1-.3 1.8-1.6 1.8" />
+  </>,
+);
+
+export const EyeOffIcon = icon(
+  <>
+    <path d="M6.3 3.6A6.5 6.5 0 0 1 8 3.4c3 0 5.3 2.4 6 4.6a8 8 0 0 1-1.7 2.6M4.2 4.9A8 8 0 0 0 2 8c.7 2.2 3 4.6 6 4.6a6 6 0 0 0 2.5-.5" />
+    <path d="M2.8 2.8l10.4 10.4" />
+  </>,
+);
+
+export const ImageIcon = icon(
+  <>
+    <rect x="2.6" y="3.2" width="10.8" height="9.6" rx="1.6" />
+    <path d="M2.8 10.4 5.6 8l2.2 1.8L10 7.6l3.2 3" />
+    <circle cx="6.1" cy="6.1" r="0.9" />
+  </>,
+);
