@@ -6,6 +6,7 @@ import { Rail } from "@/components/mail/Rail";
 import { SearchProvider } from "@/components/mail/SearchField";
 import { ShellFrame } from "@/components/mail/ShellFrame";
 import { Zone } from "@/components/mail/Zone";
+import { railCollapsed } from "@/lib/chrome";
 import { requireUser } from "@/lib/auth/require";
 import { findUser } from "@/lib/auth/users";
 import { formatClock } from "@/lib/format";
@@ -21,7 +22,7 @@ export default async function MailLayout({
 }) {
   const userId = await requireUser();
   const [rail, user, failed] = await Promise.all([listInboxes(), findUser(userId), countFailed()]);
-  const zone = await readerZone();
+  const [zone, collapsed] = await Promise.all([readerZone(), railCollapsed()]);
 
   const accounts = rail.named.map((inbox) => inbox.address);
 
@@ -53,6 +54,7 @@ export default async function MailLayout({
             failed={failed}
             user={user?.email ?? ""}
             loadedAt={formatClock(new Date(), zone)}
+            collapsed={collapsed}
           />
 
           <div data-slot="list" className="flex min-w-0 flex-none max-md:min-h-0 max-md:flex-1">
