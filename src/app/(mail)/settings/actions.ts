@@ -9,8 +9,8 @@ import { requireUser } from "@/lib/auth/require";
 import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
-import { updateAddress, type AddressPatch } from "@/lib/mail/addresses";
-import { addressSettings } from "@/lib/mail/limits";
+import { reorderAddresses, updateAddress, type AddressPatch } from "@/lib/mail/addresses";
+import { addressOrder, addressSettings } from "@/lib/mail/limits";
 import { registerAccount } from "@/lib/mail/queries";
 
 export async function addAccount(address: string) {
@@ -55,4 +55,14 @@ export async function saveAddress(address: string, patch: AddressPatch) {
   await updateAddress(address, parsed.data);
   revalidatePath("/", "layout");
   return {};
+}
+
+export async function saveOrder(order: string[]) {
+  await requireUser();
+
+  const parsed = addressOrder.safeParse(order);
+  if (!parsed.success) return;
+
+  await reorderAddresses(parsed.data);
+  revalidatePath("/", "layout");
 }

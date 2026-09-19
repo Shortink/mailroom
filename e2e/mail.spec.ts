@@ -96,10 +96,11 @@ test("address settings save and come back", async ({ page }) => {
   await page.goto("/settings/hi%40example.com");
 
   await expect(page.locator("main h1")).toHaveText("hi");
-  await page.getByRole("switch").click();
+  const autoArchive = page.getByRole("switch", { name: "Auto-archive after 30 days" });
+  await autoArchive.click();
 
   await page.reload();
-  await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(autoArchive).toHaveAttribute("aria-checked", "true");
 });
 
 test("a deleted thread waits in Trash and can come back", async ({ page }) => {
@@ -127,4 +128,65 @@ test("delete forever asks twice", async ({ page }) => {
   await page.getByRole("button", { name: "Click again to delete" }).click();
 
   await expect(page.getByText("Trash is empty")).toBeVisible();
+});
+
+test("addresses can be dragged into a new order that sticks", async ({ page }) => {
+  const rows = page.locator("aside section").first().getByRole("link", { name: /\(.+@example\.com\)/ });
+  await expect(rows).toHaveText([/billing/, /domains/, /hi/]);
+
+  // Reloading before the save comes back would cancel it.
+  const saved = page.waitForResponse((response) => response.request().method() === "POST");
+
+  // A drag made before React has attached to the sidebar does nothing, and
+  // there is no signal for that, so the drag is retried until it lands.
+  await expect(async () => {
+    await rows.nth(2).hover();
+    const box = (await page.getByRole("button", { name: "Move hi up or down" }).boundingBox())!;
+    const rowHeight = (await rows.nth(0).boundingBox())!.height;
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y - rowHeight * 2, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(rows).toHaveText([/hi/, /billing/, /domains/], { timeout: 1000 });
+  }).toPass();
+
+  await saved;
+  await page.reload();
+  await expect(rows).toHaveText([/hi/, /billing/, /domains/]);
+});
+
+test("the arrow keys move an address one place", async ({ page }) => {
+  const rows = page.locator("aside section").first().getByRole("link", { name: /\(.+@example\.com\)/ });
+
+  // Retried for the same reason as the drag above.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Move billing up or down" }).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(rows).toHaveText([/domains/, /billing/, /hi/], { timeout: 1000 });
+  }).toPass();
+
+  // The grip keeps focus as its row moves, so a second press carries on.
+  await page.keyboard.press("ArrowDown");
+  await expect(rows).toHaveText([/domains/, /hi/, /billing/]);
+
+  await page.keyboard.press("ArrowUp");
+  await expect(rows).toHaveText([/domains/, /billing/, /hi/]);
+});
+
+test("an address moved back to catch-all stays there after its mail is read", async ({ page }) => {
+  await page.goto("/settings/hi%40example.com");
+  const keep = page.getByRole("switch", { name: "Keep under Addresses" });
+  const saved = page.waitForResponse((response) => response.request().method() === "POST");
+  await keep.click();
+  await saved;
+
+  await page.goto("/");
+  await page.getByRole("link", { name: /Dana Whitfield:/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Booking");
+
+  await page.reload();
+  const catchAll = page.locator("aside section").nth(1);
+  await expect(catchAll.getByRole("link", { name: "hi (hi@example.com)" })).toBeVisible();
 });

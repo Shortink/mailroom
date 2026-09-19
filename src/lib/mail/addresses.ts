@@ -1,4 +1,4 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, asc, eq, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, messages, threads } from "../db/schema";
 
@@ -10,6 +10,7 @@ export interface AddressDetail {
   hue: number | null;
   autoArchive: boolean;
   named: boolean;
+  hidden: boolean;
   received: number;
   unread: number;
   sent: number;
@@ -40,6 +41,7 @@ export async function loadAddress(address: string): Promise<AddressDetail | null
     hue: row.hue,
     autoArchive: row.autoArchive,
     named: row.pinned,
+    hidden: row.hidden,
     received: stats?.received ?? 0,
     unread: stats?.unread ?? 0,
     sent: stats?.sent ?? 0,
@@ -56,6 +58,7 @@ export interface AddressPatch {
   hue?: number | null;
   autoArchive?: boolean;
   pinned?: boolean;
+  hidden?: boolean;
 }
 
 export async function updateAddress(address: string, patch: AddressPatch) {
@@ -65,10 +68,31 @@ export async function updateAddress(address: string, patch: AddressPatch) {
     return;
   }
 
+  // Order only applies to pinned addresses, so one moved back to catch-all
+  // comes back at the end rather than in its old slot.
+  const set = patch.pinned === false ? { ...patch, position: null } : patch;
+
   await db
     .insert(addresses)
-    .values({ address, ...patch })
-    .onConflictDoUpdate({ target: addresses.address, set: patch });
+    .values({ address, ...set })
+    .onConflictDoUpdate({ target: addresses.address, set });
+}
+
+export async function reorderAddresses(order: string[]) {
+  await db.transaction(async (tx) => {
+    for (const [position, address] of order.entries()) {
+      await tx.update(addresses).set({ position }).where(eq(addresses.address, address));
+    }
+  });
+}
+
+export async function listHidden() {
+  const rows = await db
+    .select({ address: addresses.address })
+    .from(addresses)
+    .where(eq(addresses.hidden, true))
+    .orderBy(asc(addresses.address));
+  return rows.map((row) => row.address);
 }
 
 // Identity used when sending: a display name turns the envelope into

@@ -102,6 +102,8 @@ export const addresses = pgTable("addresses", {
   // guess, so the sidebar lists pinned addresses and collapses the rest.
   pinned: boolean("pinned").notNull().default(false),
   hidden: boolean("hidden").notNull().default(false),
+  // Where a pinned address sits in the sidebar. Unset ones follow, by name.
+  position: integer("position"),
   // Identity carried on mail sent from this address.
   displayName: text("display_name"),
   replyTo: text("reply_to"),

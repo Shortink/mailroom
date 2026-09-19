@@ -16,6 +16,8 @@ export function AddressSettings({ detail, when }: { detail: AddressDetail; when:
   const [replyTo, setReplyTo] = useState(detail.replyTo ?? "");
   const [hue, setHue] = useState(detail.hue ?? hueFor(detail.address));
   const [autoArchive, setAutoArchive] = useState(detail.autoArchive);
+  const [named, setNamed] = useState(detail.named);
+  const [hidden, setHidden] = useState(detail.hidden);
 
   function persist(patch: Parameters<typeof saveAddress>[1]) {
     startTransition(async () => {
@@ -62,12 +64,40 @@ export function AddressSettings({ detail, when }: { detail: AddressDetail; when:
         <Stat label="Last activity" value={when.lastActivity} sub={when.lastActivityExact} />
       </div>
 
+      <Card title="Sidebar">
+        <Row
+          title="Keep under Addresses"
+          note="Off puts it back under catch-all with the addresses nobody named."
+        >
+          <Switch
+            label="Keep under Addresses"
+            on={named}
+            onChange={(value) => {
+              setNamed(value);
+              persist({ pinned: value });
+            }}
+          />
+        </Row>
+
+        <Row title="Hide from the sidebar" note="Mail still arrives, and search still finds it.">
+          <Switch
+            label="Hide from the sidebar"
+            on={hidden}
+            onChange={(value) => {
+              setHidden(value);
+              persist({ hidden: value });
+            }}
+          />
+        </Row>
+      </Card>
+
       <Card title="Delivery">
         <Row
           title="Auto-archive after 30 days"
           note="Quiet threads at this address leave the inbox on the next sweep."
         >
           <Switch
+            label="Auto-archive after 30 days"
             on={autoArchive}
             onChange={(value) => {
               setAutoArchive(value);
@@ -177,11 +207,20 @@ function Row({
   );
 }
 
-function Switch({ on, onChange }: { on: boolean; onChange: (value: boolean) => void }) {
+function Switch({
+  label,
+  on,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (value: boolean) => void;
+}) {
   return (
     <button
       type="button"
       role="switch"
+      aria-label={label}
       aria-checked={on}
       onClick={() => onChange(!on)}
       className={`flex h-[22px] w-[38px] items-center rounded-full border px-[3px] transition-colors ${

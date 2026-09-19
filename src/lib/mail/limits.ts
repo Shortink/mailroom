@@ -43,4 +43,7 @@ export const addressSettings = z.object({
   hue: z.number().int().min(0).max(360).nullish(),
   autoArchive: z.boolean().optional(),
   pinned: z.boolean().optional(),
+  hidden: z.boolean().optional(),
 });
+
+export const addressOrder = z.array(z.email()).max(500);

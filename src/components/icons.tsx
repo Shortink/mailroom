@@ -55,6 +55,17 @@ export const TrashIcon = icon(
   </>,
 );
 
+export const GripIcon = icon(
+  <>
+    <circle cx="6" cy="4" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="4" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="6" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="8" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="6" cy="12" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="12" r="0.9" fill="currentColor" stroke="none" />
+  </>,
+);
+
 export const SearchIcon = icon(
   <>
     <circle cx="7" cy="7" r="4.25" />

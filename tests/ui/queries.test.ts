@@ -157,7 +157,7 @@ describe("loadThread", () => {
 });
 
 describe("markThreadRead", () => {
-  it("stamps unread messages and pins the address", async () => {
+  it("stamps unread messages and leaves the address where it was", async () => {
     const threadId = await seedThread({ subject: "a", at: "2026-09-01", deliveredTo: "hi@x.test", unread: true });
 
     await markThreadRead(threadId);
@@ -166,7 +166,7 @@ describe("markThreadRead", () => {
     expect(msg.readAt).not.toBeNull();
 
     const [addr] = await db.select().from(addresses).where(eq(addresses.address, "hi@x.test"));
-    expect(addr.pinned).toBe(true);
+    expect(addr.pinned).toBe(false);
   });
 
   it("does not disturb messages already read", async () => {

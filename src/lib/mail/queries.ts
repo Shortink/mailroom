@@ -163,7 +163,7 @@ export async function listInboxes(): Promise<Rail> {
     .leftJoin(threads, eq(threads.id, messages.threadId))
     .where(eq(addresses.hidden, false))
     .groupBy(addresses.address, addresses.label, addresses.hue, addresses.pinned)
-    .orderBy(asc(addresses.address));
+    .orderBy(sql`${addresses.position} asc nulls last`, asc(addresses.address));
 
   const strip = ({ address, label, hue, unread }: (typeof rows)[number]) => ({
     address,
@@ -247,17 +247,10 @@ export async function loadMessageHtml(messageId: string) {
 }
 
 export async function markThreadRead(threadId: string) {
-  const read = await db
+  await db
     .update(messages)
     .set({ readAt: new Date() })
-    .where(and(eq(messages.threadId, threadId), isNull(messages.readAt)))
-    .returning({ deliveredTo: messages.deliveredTo });
-
-  // Opening a thread is the signal that its address is worth a sidebar slot.
-  const opened = [...new Set(read.map((row) => row.deliveredTo).filter(Boolean))] as string[];
-  for (const address of opened) {
-    await db.update(addresses).set({ pinned: true }).where(eq(addresses.address, address));
-  }
+    .where(and(eq(messages.threadId, threadId), isNull(messages.readAt)));
 }
 
 export async function setArchived(threadId: string, archived: boolean) {

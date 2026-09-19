@@ -1,11 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { addressColor } from "@/lib/mail/identity";
 import type { Inbox } from "@/lib/mail/queries";
 import { addAccount, issueInvite, signOut } from "./actions";
 
-export function SettingsClient({ appUrl, accounts }: { appUrl: string; accounts: Inbox[] }) {
+export function SettingsClient({
+  appUrl,
+  accounts,
+  hidden,
+}: {
+  appUrl: string;
+  accounts: Inbox[];
+  hidden: string[];
+}) {
   const [link, setLink] = useState<string | null>(null);
   const [newAddress, setNewAddress] = useState("");
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -64,6 +73,26 @@ export function SettingsClient({ appUrl, accounts }: { appUrl: string; accounts:
           <p className="mt-2 text-[12.5px]" style={{ color: "var(--err)" }}>
             {accountError}
           </p>
+        )}
+
+        {hidden.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 text-[12.5px] text-ink3">
+              Hidden from the sidebar. Open one to bring it back.
+            </p>
+            <ul className="flex flex-wrap gap-1.5">
+              {hidden.map((address) => (
+                <li key={address}>
+                  <Link
+                    href={`/settings/${encodeURIComponent(address)}`}
+                    className="block rounded-full border border-line px-3 py-1 font-mono text-[11.5px] text-ink2 transition-colors hover:bg-hover"
+                  >
+                    {address}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </Section>
 

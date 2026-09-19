@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useOptimistic, useRef, useState, useTransition } from "react";
+import { saveOrder } from "@/app/(mail)/settings/actions";
 import {
   ArchiveIcon,
   ChevronIcon,
   DraftIcon,
+  GripIcon,
   InboxIcon,
   MoreIcon,
   PlusIcon,
@@ -103,9 +106,7 @@ function WideRail({
             <GroupLabel action={{ href: "/settings", label: "Add an address" }}>
               Addresses
             </GroupLabel>
-            {named.map((inbox) => (
-              <AddressRow key={inbox.address} inbox={inbox} path={path} named />
-            ))}
+            <NamedAddresses named={named} path={path} />
           </section>
         )}
 
@@ -366,14 +367,115 @@ function BoxRow({
   );
 }
 
+interface Drag {
+  from: number;
+  to: number;
+  startY: number;
+  dy: number;
+  row: number;
+}
+
+function move<T>(list: T[], from: number, to: number) {
+  const next = [...list];
+  next.splice(to, 0, ...next.splice(from, 1));
+  return next;
+}
+
+// While dragging, the rows only slide out of the way. Reordering the DOM would
+// move the grip holding the pointer capture, and the release would be lost.
+function offset(drag: Drag | null, index: number) {
+  if (!drag) return 0;
+  if (index === drag.from) return drag.dy;
+  if (drag.from < drag.to && index > drag.from && index <= drag.to) return -drag.row;
+  if (drag.to < drag.from && index >= drag.to && index < drag.from) return drag.row;
+  return 0;
+}
+
+function NamedAddresses({ named, path }: { named: Inbox[]; path: string }) {
+  const [order, setOrder] = useOptimistic(named);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [, startTransition] = useTransition();
+  // Pointer moves render at a lower priority, so by the time the button comes
+  // up the state can still hold an older position. The ref is always current.
+  const live = useRef<Drag | null>(null);
+
+  function track(next: Drag | null) {
+    live.current = next;
+    setDrag(next);
+  }
+
+  function commit(next: Inbox[]) {
+    startTransition(async () => {
+      setOrder(next);
+      await saveOrder(next.map((inbox) => inbox.address));
+    });
+  }
+
+  function step(index: number, by: number) {
+    const to = index + by;
+    if (to >= 0 && to < order.length) commit(move(order, index, to));
+  }
+
+  return order.map((inbox, index) => (
+    <AddressRow
+      key={inbox.address}
+      inbox={inbox}
+      path={path}
+      named
+      shift={offset(drag, index)}
+      lifted={drag?.from === index}
+      grip={{
+        onPointerDown(event) {
+          if (event.button !== 0) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          const row = event.currentTarget.parentElement!.getBoundingClientRect().height;
+          track({ from: index, to: index, startY: event.clientY, dy: 0, row });
+        },
+        onPointerMove(event) {
+          const current = live.current;
+          if (!current) return;
+          const dy = event.clientY - current.startY;
+          const to = Math.min(Math.max(current.from + Math.round(dy / current.row), 0), order.length - 1);
+          track({ ...current, dy, to });
+        },
+        onPointerUp() {
+          const current = live.current;
+          if (current && current.to !== current.from) commit(move(order, current.from, current.to));
+          track(null);
+        },
+        onPointerCancel() {
+          track(null);
+        },
+        onKeyDown(event) {
+          if (event.key === "ArrowUp") step(index, -1);
+          else if (event.key === "ArrowDown") step(index, 1);
+          else return;
+          event.preventDefault();
+        },
+      }}
+    />
+  ));
+}
+
+type GripHandlers = Pick<
+  React.ComponentProps<"button">,
+  "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onKeyDown"
+>;
+
 function AddressRow({
   inbox,
   path,
   named = false,
+  grip,
+  shift = 0,
+  lifted = false,
 }: {
   inbox: Inbox;
   path: string;
   named?: boolean;
+  grip?: GripHandlers;
+  shift?: number;
+  lifted?: boolean;
 }) {
   const href = `/a/${encodeURIComponent(inbox.address)}`;
   const active = path === href;
@@ -381,22 +483,31 @@ function AddressRow({
 
   // The settings link is a sibling rather than a child, because a link inside
   // a link is invalid and the inner one stops working.
+  const name = inbox.label ?? localPart(inbox.address);
+
   return (
-    <div className="group relative">
+    <div
+      className={`group relative ${
+        lifted ? "z-10 rounded-[10px] bg-panel2 shadow-lg" : "transition-transform duration-150"
+      }`}
+      style={shift ? { transform: `translateY(${shift}px)` } : undefined}
+    >
       <Link
         href={href}
-        aria-label={`${inbox.label ?? localPart(inbox.address)} (${inbox.address})`}
+        aria-label={`${name} (${inbox.address})`}
         className={`flex items-center gap-2.5 rounded-[10px] border py-2 pr-9 pl-2.5 transition-colors ${
           active ? "border-accent bg-accent-soft" : "border-transparent hover:bg-hover"
         }`}
       >
         <span
-          className={`size-[7px] flex-none rounded-full ${named ? "" : "border border-dashed"}`}
+          className={`size-[7px] flex-none rounded-full ${named ? "" : "border border-dashed"} ${
+            grip ? "group-hover:opacity-0 group-has-focus-visible:opacity-0" : ""
+          }`}
           style={named ? { background: color } : { borderColor: "var(--ink3)" }}
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-medium text-ink2">
-            {inbox.label ?? localPart(inbox.address)}
+            {name}
           </span>
           <span className="block truncate font-mono text-[10px] text-ink3">{inbox.address}</span>
         </span>
@@ -404,6 +515,19 @@ function AddressRow({
           <span className="flex-none font-mono text-[10px] text-ink3">{inbox.unread}</span>
         )}
       </Link>
+
+      {/* Sits over the colour dot. Invisible until hovered, and it ignores the
+          pointer until then too, so a tap on a phone still opens the address. */}
+      {grip && (
+        <button
+          type="button"
+          aria-label={`Move ${name} up or down`}
+          {...grip}
+          className="pointer-events-none absolute top-1/2 left-[5px] flex h-6 w-4 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded text-ink3 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
+        >
+          <GripIcon className="size-3" />
+        </button>
+      )}
 
       <Link
         href={`/settings/${encodeURIComponent(inbox.address)}`}

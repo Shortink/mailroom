@@ -57,6 +57,13 @@
       "when": 1789846518436,
       "tag": "0007_steady_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789859376128,
+      "tag": "0008_soft_mole_man",
+      "breakpoints": true
     }
   ]
 }

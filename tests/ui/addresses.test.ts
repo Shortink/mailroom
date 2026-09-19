@@ -4,10 +4,13 @@ import { db } from "../../src/lib/db/client";
 import { addresses, messages, threads } from "../../src/lib/db/schema";
 import {
   archiveStaleThreads,
+  listHidden,
   loadAddress,
+  reorderAddresses,
   sendingIdentity,
   updateAddress,
 } from "../../src/lib/mail/addresses";
+import { listInboxes } from "../../src/lib/mail/queries";
 
 async function seedThread(opts: { subject: string; at: string; deliveredTo: string }) {
   const [thread] = await db
@@ -126,5 +129,45 @@ describe("archiveStaleThreads", () => {
   it("does nothing when no address opted in", async () => {
     await seedThread({ subject: "quiet", at: "2026-01-01", deliveredTo: "hi@x.test" });
     expect(await archiveStaleThreads()).toBe(0);
+  });
+});
+
+describe("sidebar order", () => {
+  async function pinned(...list: string[]) {
+    for (const address of list) await db.insert(addresses).values({ address, pinned: true });
+  }
+
+  it("lists placed addresses in their order, then the rest by name", async () => {
+    await pinned("a@x.test", "b@x.test", "c@x.test", "d@x.test");
+    await reorderAddresses(["c@x.test", "a@x.test"]);
+
+    const { named } = await listInboxes();
+    expect(named.map((inbox) => inbox.address)).toEqual([
+      "c@x.test",
+      "a@x.test",
+      "b@x.test",
+      "d@x.test",
+    ]);
+  });
+
+  it("forgets the place of an address moved back to catch-all", async () => {
+    await pinned("a@x.test", "b@x.test");
+    await reorderAddresses(["b@x.test", "a@x.test"]);
+
+    await updateAddress("b@x.test", { pinned: false });
+    await updateAddress("b@x.test", { pinned: true });
+
+    const { named } = await listInboxes();
+    expect(named.map((inbox) => inbox.address)).toEqual(["a@x.test", "b@x.test"]);
+  });
+
+  it("takes a hidden address out of the sidebar and lists it for settings", async () => {
+    await pinned("a@x.test", "b@x.test");
+    await updateAddress("a@x.test", { hidden: true });
+
+    const { named } = await listInboxes();
+    expect(named.map((inbox) => inbox.address)).toEqual(["b@x.test"]);
+    expect(await listHidden()).toEqual(["a@x.test"]);
+    expect((await loadAddress("a@x.test"))?.hidden).toBe(true);
   });
 });
