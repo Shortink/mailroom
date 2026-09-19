@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, attachments, messages, threads } from "../db/schema";
 import { countDrafts } from "./drafts";
@@ -22,7 +22,7 @@ export interface ThreadSummary {
 // stays gated on "complete", which is when it has been fetched.
 const visible = or(eq(messages.status, "complete"), eq(messages.direction, "outbound"));
 
-export type Box = "inbox" | "sent" | "archive";
+export type Box = "inbox" | "sent" | "archive" | "trash";
 
 export interface ListOptions {
   address?: string;
@@ -50,7 +50,11 @@ function addressMatch(box: Box, address: string) {
 // separate from the hydration below so that only the page being shown pays for
 // the joins and aggregates.
 async function pageOfThreads(opts: ListOptions, box: Box, limit: number) {
-  const where = [visible, eq(threads.archived, box === "archive")];
+  // Trash takes threads from every box, so the archived flag doesn't matter there.
+  const where =
+    box === "trash"
+      ? [visible, isNotNull(threads.trashedAt)]
+      : [visible, isNull(threads.trashedAt), eq(threads.archived, box === "archive")];
 
   if (box === "sent") where.push(eq(messages.direction, "outbound"));
   if (opts.address) where.push(addressMatch(box, opts.address));
@@ -142,6 +146,7 @@ export interface Rail {
   sent: number;
   drafts: number;
   archived: number;
+  trashed: number;
 }
 
 export async function listInboxes(): Promise<Rail> {
@@ -151,10 +156,11 @@ export async function listInboxes(): Promise<Rail> {
       label: addresses.label,
       hue: addresses.hue,
       pinned: addresses.pinned,
-      unread: sql<number>`count(${messages.id}) filter (where ${messages.readAt} is null and ${messages.status} = 'complete')::int`,
+      unread: sql<number>`count(${messages.id}) filter (where ${messages.readAt} is null and ${messages.status} = 'complete' and ${threads.trashedAt} is null)::int`,
     })
     .from(addresses)
     .leftJoin(messages, eq(messages.deliveredTo, addresses.address))
+    .leftJoin(threads, eq(threads.id, messages.threadId))
     .where(eq(addresses.hidden, false))
     .groupBy(addresses.address, addresses.label, addresses.hue, addresses.pinned)
     .orderBy(asc(addresses.address));
@@ -172,12 +178,18 @@ export async function listInboxes(): Promise<Rail> {
       sent: sql<number>`count(distinct ${messages.threadId}) filter (where ${messages.direction} = 'outbound')::int`,
     })
     .from(messages)
-    .where(visible);
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(and(visible, isNull(threads.trashedAt)));
 
   const [archived] = await db
     .select({ n: count() })
     .from(threads)
-    .where(eq(threads.archived, true));
+    .where(and(eq(threads.archived, true), isNull(threads.trashedAt)));
+
+  const [trashed] = await db
+    .select({ n: count() })
+    .from(threads)
+    .where(isNotNull(threads.trashedAt));
 
   const draftCount = await countDrafts();
 
@@ -190,6 +202,7 @@ export async function listInboxes(): Promise<Rail> {
     sent: totals?.sent ?? 0,
     drafts: draftCount,
     archived: archived?.n ?? 0,
+    trashed: trashed?.n ?? 0,
   };
 }
 
@@ -305,6 +318,7 @@ export async function searchThreads(query: string, scope: SearchScope): Promise<
     .innerJoin(matched, eq(matched.threadId, threads.id))
     .innerJoin(messages, eq(messages.threadId, threads.id))
     .leftJoin(attachments, eq(attachments.messageId, messages.id))
+    .where(isNull(threads.trashedAt))
     .groupBy(threads.id)
     .orderBy(desc(threads.lastMessageAt))
     .limit(50);

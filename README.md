@@ -242,6 +242,9 @@ curl -X POST -H "Authorization: Bearer $RECONCILE_TOKEN" \
 
 Any scheduler works: a platform cron, a systemd timer, or a plain crontab.
 
+The same sweep empties Trash. A deleted thread stays there for 30 days, then it
+and its attachments are removed for good.
+
 ## How it works
 
 Inbound webhooks carry metadata only. The handler verifies the Svix signature,

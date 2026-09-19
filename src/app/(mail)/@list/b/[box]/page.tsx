@@ -3,7 +3,7 @@ import { DraftListPane } from "@/components/mail/DraftListPane";
 import { ThreadList } from "@/components/mail/ThreadList";
 import type { Box } from "@/lib/mail/queries";
 
-const BOXES: Box[] = ["sent", "archive"];
+const BOXES: Box[] = ["sent", "archive", "trash"];
 
 export default async function BoxList({
   params,

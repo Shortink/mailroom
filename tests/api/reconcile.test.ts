@@ -80,21 +80,21 @@ describe("reconcile", () => {
     const response = await call(process.env.RECONCILE_TOKEN);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ found: 2, retried: 2, archived: 0 });
+    expect(await response.json()).toEqual({ found: 2, retried: 2, archived: 0, purged: 0 });
     expect(completeIngest).toHaveBeenCalledTimes(2);
   });
 
   it("leaves recently attempted rows alone", async () => {
     await seed([{ resendId: "fresh", lastAttemptAt: FRESH }]);
 
-    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0 });
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0, purged: 0 });
     expect(completeIngest).not.toHaveBeenCalled();
   });
 
   it("skips rows that already exhausted their attempts", async () => {
     await seed([{ resendId: "spent", attempts: 5 }]);
 
-    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0 });
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0, purged: 0 });
   });
 
   it("ignores rows that are finished or spent", async () => {
@@ -103,7 +103,7 @@ describe("reconcile", () => {
       { resendId: "dead", status: "failed" },
     ]);
 
-    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0 });
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 0, retried: 0, archived: 0, purged: 0 });
   });
 
   // A complete message whose attachments or forwarded copy never landed is
@@ -111,13 +111,13 @@ describe("reconcile", () => {
   it("picks up a complete message that never finished ingesting", async () => {
     await seed([{ resendId: "half", status: "complete" }]);
 
-    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 1, retried: 1, archived: 0 });
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 1, retried: 1, archived: 0, purged: 0 });
   });
 
   it("picks up a row that never got its first attempt", async () => {
     await seed([{ resendId: "untouched", lastAttemptAt: null }]);
 
-    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 1, retried: 1, archived: 0 });
+    expect(await (await call(process.env.RECONCILE_TOKEN)).json()).toEqual({ found: 1, retried: 1, archived: 0, purged: 0 });
   });
 
   it("keeps sweeping after one row throws", async () => {
@@ -127,7 +127,7 @@ describe("reconcile", () => {
     const body = await (await call(process.env.RECONCILE_TOKEN)).json();
 
     expect(completeIngest).toHaveBeenCalledTimes(2);
-    expect(body).toEqual({ found: 2, retried: 1, archived: 0 });
+    expect(body).toEqual({ found: 2, retried: 1, archived: 0, purged: 0 });
   });
 });
 

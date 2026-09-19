@@ -113,6 +113,36 @@ describe("completeIngest", () => {
     expect(orphans).toHaveLength(0);
   });
 
+  it("starts a thread of its own when the one it replies to is in Trash", async () => {
+    const [trashed] = await db
+      .insert(threads)
+      .values({
+        subject: "Invoice",
+        participants: ["billing@vendor.test", "hi@example.test"],
+        trashedAt: new Date(),
+      })
+      .returning();
+    await db.insert(messages).values({
+      threadId: trashed.id,
+      direction: "inbound",
+      status: "complete",
+      messageId: "<original@vendor.test>",
+    });
+
+    getReceivedEmail.mockResolvedValue({
+      id: "r3t",
+      subject: "Re: Invoice",
+      from: "billing@vendor.test",
+      headers: { "in-reply-to": "<original@vendor.test>" },
+    });
+
+    const row = await pending("r3t");
+    await completeIngest(row.id);
+
+    const [after] = await db.select().from(messages).where(eq(messages.id, row.id));
+    expect(after.threadId).toBe(row.threadId);
+  });
+
   // The delivered-to address is a participant on every thread, so it cannot be
   // the thing that proves a message belongs to one.
   it("refuses a stranger quoting a message id from someone else's thread", async () => {

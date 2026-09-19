@@ -8,6 +8,7 @@ const NAMES: Record<string, string> = {
   "/": "All mail",
   "/b/sent": "Sent",
   "/b/archive": "Archive",
+  "/b/trash": "Trash",
   "/settings": "Settings",
 };
 

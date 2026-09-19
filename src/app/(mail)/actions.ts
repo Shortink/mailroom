@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { record } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/require";
@@ -17,6 +18,7 @@ import {
 import { formatWhen } from "@/lib/format";
 import { renderHtml } from "@/lib/mail/render";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
+import { deleteForever, setTrashed } from "@/lib/mail/trash";
 import { readerZone } from "@/lib/zone";
 
 export interface SendInput {
@@ -77,6 +79,21 @@ export async function archiveThread(threadId: string, archived: boolean) {
   await requireUser();
   await setArchived(threadId, archived);
   revalidatePath("/", "layout");
+}
+
+export async function trashThread(threadId: string, trashed: boolean) {
+  await requireUser();
+  await setTrashed(threadId, trashed);
+  revalidatePath("/", "layout");
+}
+
+export async function deleteThread(threadId: string) {
+  await requireUser();
+  await deleteForever(threadId);
+  revalidatePath("/", "layout");
+  // Leaving from here rather than the client, because the refresh above would
+  // otherwise render the thread page for a thread that no longer exists.
+  redirect("/b/trash");
 }
 
 export async function storeDraft(input: DraftInput) {

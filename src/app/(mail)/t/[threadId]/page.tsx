@@ -90,6 +90,9 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   const newSender = inbound.length > 1 && Boolean(replyTo) && !earlier.has(replyTo);
   const replySubject = thread.subject.startsWith("Re: ") ? thread.subject : `Re: ${thread.subject}`;
 
+  // A reply would land in Trash with the thread, so it has to be restored first.
+  const trashed = thread.trashedAt !== null;
+
   const count = `${thread.messages.length} ${thread.messages.length === 1 ? "message" : "messages"}`;
 
   return (
@@ -114,12 +117,14 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
           <p className="mt-0.5 truncate font-mono text-[10px] text-ink3">
             {count}
             {replyFrom && ` · ${replyFrom}`}
+            {trashed && " · in Trash"}
           </p>
         </div>
 
         <ThreadActions
           threadId={thread.id}
           archived={thread.archived}
+          trashed={trashed}
           replyFrom={replyFrom}
           replyTo={replyTo}
           replySubject={replySubject}
@@ -136,7 +141,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
 
         <MessageThread messages={messages} nonce={nonce} />
 
-        {replyTo && (
+        {replyTo && !trashed && (
           <QuickReply
             threadId={thread.id}
             replyFrom={replyFrom}

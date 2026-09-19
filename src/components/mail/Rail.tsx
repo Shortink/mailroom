@@ -11,6 +11,7 @@ import {
   PlusIcon,
   SendIcon,
   SettingsIcon,
+  TrashIcon,
 } from "@/components/icons";
 import { addressColor, initials, localPart } from "@/lib/mail/identity";
 import { FailedMail } from "./FailedMail";
@@ -46,6 +47,7 @@ function WideRail({
   sent,
   drafts,
   archived,
+  trashed,
   failed,
   user,
   loadedAt,
@@ -89,6 +91,9 @@ function WideRail({
         </BoxRow>
         <BoxRow href="/b/archive" label="Archive" count={archived} active={path === "/b/archive"}>
           <ArchiveIcon className="size-4" />
+        </BoxRow>
+        <BoxRow href="/b/trash" label="Trash" count={trashed} active={path === "/b/trash"}>
+          <TrashIcon className="size-4" />
         </BoxRow>
       </nav>
 
@@ -182,6 +187,7 @@ function NarrowRail({
   sent,
   drafts,
   archived,
+  trashed,
   user,
   collapsed,
 }: Props) {
@@ -221,6 +227,9 @@ function NarrowRail({
           active={path === "/b/archive"}
         >
           <ArchiveIcon className="size-3.5" />
+        </BoxTarget>
+        <BoxTarget href="/b/trash" title="Trash" count={trashed} active={path === "/b/trash"}>
+          <TrashIcon className="size-3.5" />
         </BoxTarget>
       </nav>
 

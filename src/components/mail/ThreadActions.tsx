@@ -1,24 +1,61 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
-import { archiveThread } from "@/app/(mail)/actions";
+import { useState, useTransition } from "react";
+import { archiveThread, deleteThread, trashThread } from "@/app/(mail)/actions";
 import { useCompose } from "./Compose";
 
 interface Props {
   threadId: string;
   archived: boolean;
+  trashed: boolean;
   replyFrom: string;
   replyTo: string;
   replySubject: string;
 }
 
-export function ThreadActions({ threadId, archived, replyFrom, replyTo, replySubject }: Props) {
+const quiet =
+  "rounded-[10px] border border-line px-3.5 py-1.5 text-[12.5px] text-ink2 transition-colors hover:bg-hover disabled:opacity-50";
+
+export function ThreadActions({
+  threadId,
+  archived,
+  trashed,
+  replyFrom,
+  replyTo,
+  replySubject,
+}: Props) {
   const compose = useCompose();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const draft = { threadId, from: replyFrom, to: replyTo, subject: replySubject };
+
+  function run(action: () => Promise<void>, then?: string) {
+    startTransition(async () => {
+      await action();
+      if (then) router.push(then);
+    });
+  }
+
+  if (trashed) {
+    return (
+      <div className="ml-auto flex flex-none items-center gap-2">
+        <button
+          type="button"
+          onClick={() => run(() => trashThread(threadId, false))}
+          disabled={pending}
+          className={quiet}
+        >
+          Restore
+        </button>
+        <DeleteForever
+          disabled={pending}
+          onConfirm={() => run(() => deleteThread(threadId))}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="ml-auto flex flex-none items-center gap-2">
@@ -33,19 +70,39 @@ export function ThreadActions({ threadId, archived, replyFrom, replyTo, replySub
 
       <button
         type="button"
-        onClick={() => {
-          startTransition(async () => {
-            await archiveThread(threadId, !archived);
-            // Archiving takes the thread out of the list it was read from.
-            if (!archived) router.push("/");
-          });
-        }}
+        onClick={() => run(() => archiveThread(threadId, !archived), archived ? undefined : "/")}
         disabled={pending}
-        className="rounded-[10px] border border-line px-3.5 py-1.5 text-[12.5px] text-ink2 transition-colors hover:bg-hover disabled:opacity-50"
+        className={quiet}
       >
         {archived ? "Unarchive" : "Archive"}
       </button>
+
+      <button
+        type="button"
+        onClick={() => run(() => trashThread(threadId, true), "/")}
+        disabled={pending}
+        className={quiet}
+      >
+        Delete
+      </button>
     </div>
+  );
+}
+
+// Nothing brings the thread back after this, so it takes a second click.
+function DeleteForever({ disabled, onConfirm }: { disabled: boolean; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => (armed ? onConfirm() : setArmed(true))}
+      onBlur={() => setArmed(false)}
+      disabled={disabled}
+      className={armed ? `${quiet} border-warn-line text-warn` : quiet}
+    >
+      {armed ? "Click again to delete" : "Delete forever"}
+    </button>
   );
 }
 
@@ -55,7 +112,7 @@ export function QuickReply({
   replyTo,
   replySubject,
   initials,
-}: Omit<Props, "archived"> & { initials: string }) {
+}: Omit<Props, "archived" | "trashed"> & { initials: string }) {
   const compose = useCompose();
 
   return (

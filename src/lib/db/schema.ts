@@ -28,6 +28,8 @@ export const threads = pgTable(
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
     messageCount: integer("message_count").notNull().default(0),
     archived: boolean("archived").notNull().default(false),
+    // The sweep deletes the thread for good thirty days after this.
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
   },
   (t) => [index("threads_last_message_at_idx").on(t.lastMessageAt.desc())],
 );

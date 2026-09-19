@@ -11,6 +11,7 @@ const TITLES: Record<Box, string> = {
   inbox: "All mail",
   sent: "Sent",
   archive: "Archive",
+  trash: "Trash",
 };
 
 interface Props {
@@ -89,7 +90,7 @@ export async function ThreadList({ box = "inbox", address, unreadOnly, before }:
       </header>
 
       {items.length === 0 ? (
-        <EmptyList unreadOnly={unreadOnly} address={address} base={base} />
+        <EmptyList unreadOnly={unreadOnly} address={address} base={base} trash={box === "trash"} />
       ) : (
         <ThreadRows items={items} />
       )}
@@ -144,10 +145,12 @@ function EmptyList({
   unreadOnly,
   address,
   base,
+  trash,
 }: {
   unreadOnly?: boolean;
   address?: string;
   base: string;
+  trash: boolean;
 }) {
   const where = address ? `at ${address}` : "here";
 
@@ -155,7 +158,14 @@ function EmptyList({
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
       <span className="size-8 rotate-45 rounded-[9px] border border-line" />
 
-      {unreadOnly ? (
+      {trash && !unreadOnly ? (
+        <>
+          <p className="text-[14px] font-semibold">Trash is empty</p>
+          <p className="text-[12.5px] text-ink3">
+            Deleted threads stay here for 30 days. After that they are gone for good.
+          </p>
+        </>
+      ) : unreadOnly ? (
         <>
           <p className="text-[14px] font-semibold">Nothing unread here</p>
           <p className="text-[12.5px] text-ink3">Everything {where} has been read.</p>

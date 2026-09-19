@@ -224,6 +224,8 @@ async function land(row: Row, mail: InboundMail) {
 async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId: string }) {
   const { incoming, placeholderThreadId } = input;
 
+  // A reply to something in Trash starts a thread of its own. Joining the old
+  // one would file new mail straight into Trash, and the sweep would delete it.
   const referenced = [incoming.inReplyTo, ...incoming.references].filter(
     (id): id is string => Boolean(id),
   );
@@ -237,7 +239,7 @@ async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId
         })
         .from(messages)
         .innerJoin(threads, eq(threads.id, messages.threadId))
-        .where(inArray(messages.messageId, referenced))) as {
+        .where(and(inArray(messages.messageId, referenced), isNull(threads.trashedAt)))) as {
         messageId: string;
         threadId: string;
         participants: string[];
@@ -255,7 +257,7 @@ async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId
       lastMessageAt: threads.lastMessageAt,
     })
     .from(threads)
-    .where(gte(threads.lastMessageAt, cutoff))
+    .where(and(gte(threads.lastMessageAt, cutoff), isNull(threads.trashedAt)))
     .limit(CANDIDATE_LIMIT);
 
   const wanted = normalizeSubject(incoming.subject);

@@ -47,6 +47,14 @@ export const ArchiveIcon = icon(
   </>,
 );
 
+export const TrashIcon = icon(
+  <>
+    <path d="M2.75 4.25h10.5" />
+    <path d="M6.25 4.25V2.75h3.5v1.5" />
+    <path d="M3.9 4.25l.7 8.1c.05.6.5 1.05 1.1 1.05h4.6c.6 0 1.05-.45 1.1-1.05l.7-8.1" />
+  </>,
+);
+
 export const SearchIcon = icon(
   <>
     <circle cx="7" cy="7" r="4.25" />

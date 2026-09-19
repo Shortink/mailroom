@@ -101,3 +101,30 @@ test("address settings save and come back", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "true");
 });
+
+test("a deleted thread waits in Trash and can come back", async ({ page }) => {
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+
+  await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Trash" }).click();
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Restore" }).click();
+
+  await page.getByRole("link", { name: "All mail" }).click();
+  await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toBeVisible();
+});
+
+test("delete forever asks twice", async ({ page }) => {
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Trash" }).click();
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Delete forever" }).click();
+  await page.getByRole("button", { name: "Click again to delete" }).click();
+
+  await expect(page.getByText("Trash is empty")).toBeVisible();
+});

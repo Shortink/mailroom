@@ -5,6 +5,7 @@ import { archiveStaleThreads } from "./addresses";
 import { completeIngest } from "./ingest";
 import { CLAIM_MS } from "./limits";
 import { captureMessageId } from "./send";
+import { emptyOldTrash } from "./trash";
 
 // Matches the claim window in completeIngest, so the sweep only picks up work
 // that has actually been abandoned rather than work still in progress.
@@ -15,6 +16,7 @@ export interface ReconcileResult {
   found: number;
   retried: number;
   archived: number;
+  purged: number;
 }
 
 // Ingest finishes out of band, so anything left pending is work that never
@@ -52,7 +54,12 @@ export async function reconcile(): Promise<ReconcileResult> {
     }
   }
 
-  return { found: stale.length, retried, archived: await archiveStaleThreads() };
+  return {
+    found: stale.length,
+    retried,
+    archived: await archiveStaleThreads(),
+    purged: await emptyOldTrash(),
+  };
 }
 
 // A message that exhausted its attempts is not retried again on its own, so
