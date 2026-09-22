@@ -64,6 +64,13 @@
       "when": 1789859376128,
       "tag": "0008_soft_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790112173820,
+      "tag": "0009_tranquil_prodigy",
+      "breakpoints": true
     }
   ]
 }

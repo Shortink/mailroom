@@ -246,6 +246,14 @@ export async function loadMessageHtml(messageId: string) {
   return { html: message.htmlBody, parts };
 }
 
+export async function loadSender(messageId: string) {
+  const [row] = await db
+    .select({ from: messages.fromAddress })
+    .from(messages)
+    .where(and(eq(messages.id, messageId), eq(messages.direction, "inbound")));
+  return row?.from ?? null;
+}
+
 export async function markThreadRead(threadId: string) {
   await db
     .update(messages)

@@ -10,6 +10,7 @@ import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import { reorderAddresses, updateAddress, type AddressPatch } from "@/lib/mail/addresses";
+import { setLoadsImages } from "@/lib/mail/images";
 import { addressOrder, addressSettings } from "@/lib/mail/limits";
 import { registerAccount } from "@/lib/mail/queries";
 
@@ -64,5 +65,12 @@ export async function saveOrder(order: string[]) {
   if (!parsed.success) return;
 
   await reorderAddresses(parsed.data);
+  revalidatePath("/", "layout");
+}
+
+export async function saveLoadImages(on: boolean) {
+  const userId = await requireUser();
+
+  await setLoadsImages(userId, on);
   revalidatePath("/", "layout");
 }

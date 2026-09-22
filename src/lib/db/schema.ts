@@ -112,6 +112,12 @@ export const addresses = pgTable("addresses", {
   autoArchive: boolean("auto_archive").notNull().default(false),
 });
 
+// Senders whose remote images load without asking, wherever their mail lands.
+export const imageSenders = pgTable("image_senders", {
+  address: text("address").primaryKey(),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // A draft belongs to a thread when it is a reply, and stands alone otherwise.
 export const drafts = pgTable("drafts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -135,6 +141,7 @@ export const users = pgTable("users", {
   // Bumped on password change, TOTP re-enrolment and logout, so outstanding
   // stateless sessions stop verifying.
   sessionVersion: integer("session_version").notNull().default(0),
+  loadImages: boolean("load_images").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

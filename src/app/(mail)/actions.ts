@@ -10,6 +10,7 @@ import { retryFailed } from "@/lib/mail/reconcile";
 import { draft, outgoing } from "@/lib/mail/limits";
 import {
   loadMessageHtml,
+  loadSender,
   markThreadRead,
   searchThreads,
   setArchived,
@@ -18,6 +19,7 @@ import {
 import { formatWhen } from "@/lib/format";
 import { renderHtml } from "@/lib/mail/render";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
+import { allowSender, disallowSender } from "@/lib/mail/images";
 import { deleteForever, setTrashed } from "@/lib/mail/trash";
 import { readerZone } from "@/lib/zone";
 
@@ -156,6 +158,23 @@ export async function showImages(messageId: string) {
 
   const loaded = await loadMessageHtml(messageId);
   return loaded ? renderHtml(loaded.html, loaded.parts, { remote: true }) : null;
+}
+
+// Takes the message rather than an address, so the allowance can only ever
+// name someone who actually wrote in.
+export async function alwaysShowImages(messageId: string) {
+  await requireUser();
+
+  const from = await loadSender(messageId);
+  if (from) await allowSender(from);
+  revalidatePath("/", "layout");
+}
+
+export async function stopShowingImages(sender: string) {
+  await requireUser();
+
+  await disallowSender(sender);
+  revalidatePath("/", "layout");
 }
 
 export async function retryFailedMail() {

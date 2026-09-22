@@ -88,3 +88,60 @@ test("a style block survives, and what it could fetch with does not", async ({ p
   expect(srcdoc).toContain("padding:20px");
   expect(srcdoc).not.toContain("tracker.example");
 });
+
+test("images from a sender can be allowed for good, and taken back", async ({ page }) => {
+  const threadId = await seedHtmlMessage('<p>Sale</p><img src="https://images.example/banner.png" alt="">');
+  await page.goto(`/t/${threadId}`);
+
+  const imageSrc = () =>
+    page
+      .frames()
+      .find((f) => f.url().startsWith("about:srcdoc"))!
+      .locator("img")
+      .getAttribute("src");
+
+  await expect(page.getByText("Remote images blocked.")).toBeVisible();
+  expect(await imageSrc()).toBeNull();
+
+  await page.getByRole("button", { name: "Always from this sender" }).click();
+  await expect(page.getByText("always load.")).toContainText("sender@html.example");
+
+  // A reload shows the server decided it, not something the page kept.
+  await page.reload();
+  await expect(page.getByText("always load.")).toBeVisible();
+  expect(await imageSrc()).toBe("https://images.example/banner.png");
+
+  await page.getByRole("button", { name: "Stop" }).click();
+  await expect(page.getByText("Remote images blocked.")).toBeVisible();
+});
+
+test("an allowed sender can be removed from settings", async ({ page }) => {
+  const threadId = await seedHtmlMessage('<img src="https://images.example/banner.png" alt="">');
+  await page.goto(`/t/${threadId}`);
+  await page.getByRole("button", { name: "Always from this sender" }).click();
+  await expect(page.getByText("always load.")).toBeVisible();
+
+  await page.goto("/settings");
+  const row = page.getByRole("listitem").filter({ hasText: "sender@html.example" });
+  await row.getByRole("button", { name: "Remove" }).click();
+  await expect(row).toHaveCount(0);
+});
+
+test("images load without asking once settings say so, except on failed mail", async ({ page }) => {
+  await page.goto("/settings");
+  const saved = page.waitForResponse((response) => response.request().method() === "POST");
+  await page.getByRole("switch", { name: "Load remote images without asking" }).click();
+  await saved;
+
+  const threadId = await seedHtmlMessage('<img src="https://images.example/banner.png" alt="">');
+  await page.goto(`/t/${threadId}`);
+  await expect(page.locator('iframe[title="Message"]')).toBeVisible();
+  await expect(page.getByText("Remote images blocked.")).toHaveCount(0);
+
+  const forged = await seedHtmlMessage('<img src="https://images.example/banner.png" alt="">', {
+    dmarc: "mx.example; spf=fail smtp.mailfrom=html.example; dmarc=fail",
+  });
+  await page.goto(`/t/${forged}`);
+  await expect(page.getByText("This message failed authentication")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Always from this sender" })).toHaveCount(0);
+});

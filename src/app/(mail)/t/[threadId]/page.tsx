@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth/require";
 import { formatAgo, formatExact, formatSize, snippet } from "@/lib/format";
 import { authentication } from "@/lib/mail/auth";
 import { shownHeaders } from "@/lib/mail/headers";
+import { imageRules, loadsImages, senderOf } from "@/lib/mail/images";
 import { addressColor, initials } from "@/lib/mail/identity";
 import { hasQuotedReply, hasRemoteImages, referencedCids } from "@/lib/mail/parts";
 import { loadThread } from "@/lib/mail/queries";
@@ -26,7 +27,7 @@ function extension(filename: string) {
 }
 
 export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
-  await requireUser();
+  const userId = await requireUser();
   const { threadId } = await params;
 
   const thread = await loadThread(threadId);
@@ -42,8 +43,15 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   // reporter runs and nothing that arrived in a message does.
   const nonce = crypto.randomUUID();
 
-  const messages: ThreadMessage[] = thread.messages.map((message) => {
+  const verdicts = thread.messages.map((message) => authentication(message));
+  const rules = await imageRules(
+    thread.messages.map((message, index) => ({ ...message, verdict: verdicts[index].verdict })),
+    await loadsImages(userId),
+  );
+
+  const messages: ThreadMessage[] = thread.messages.map((message, index) => {
     const outbound = message.direction === "outbound";
+    const images = rules[index];
     const drawn = referencedCids(message.htmlBody);
 
     const files: ThreadFile[] = thread.attachments
@@ -68,11 +76,15 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
       snippet: snippet(message.textBody),
       initials: outbound ? "You" : initials(message.fromName, message.fromAddress),
       outbound,
-      auth: authentication(message),
+      auth: verdicts[index],
       headers: shownHeaders(message.headers),
-      html: message.htmlBody ? renderHtml(message.htmlBody, thread.attachments) : null,
+      html: message.htmlBody
+        ? renderHtml(message.htmlBody, thread.attachments, { remote: images !== null })
+        : null,
       text: message.textBody,
       remoteImages: hasRemoteImages(message.htmlBody),
+      images,
+      sender: outbound ? null : senderOf(message.fromAddress),
       quoted: hasQuotedReply(message.htmlBody),
       files,
     };

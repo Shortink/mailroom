@@ -207,7 +207,7 @@ function Row({
   );
 }
 
-function Switch({
+export function Switch({
   label,
   on,
   onChange,

@@ -4,17 +4,24 @@ import Link from "next/link";
 import { useState } from "react";
 import { addressColor } from "@/lib/mail/identity";
 import type { Inbox } from "@/lib/mail/queries";
-import { addAccount, issueInvite, signOut } from "./actions";
+import { Switch } from "@/components/mail/AddressSettings";
+import { stopShowingImages } from "../actions";
+import { addAccount, issueInvite, saveLoadImages, signOut } from "./actions";
 
 export function SettingsClient({
   appUrl,
   accounts,
   hidden,
+  imageSenders,
+  loadImages,
 }: {
   appUrl: string;
   accounts: Inbox[];
   hidden: string[];
+  imageSenders: string[];
+  loadImages: boolean;
 }) {
+  const [loadAll, setLoadAll] = useState(loadImages);
   const [link, setLink] = useState<string | null>(null);
   const [newAddress, setNewAddress] = useState("");
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -93,6 +100,48 @@ export function SettingsClient({
               ))}
             </ul>
           </div>
+        )}
+      </Section>
+
+      <Section
+        title="Remote images"
+        note="A remote image tells the sender you opened their mail. Mail that fails authentication is always blocked."
+      >
+        <div className="flex items-center gap-4 rounded-xl border border-line bg-chip px-3.5 py-3">
+          <span className="min-w-0 flex-1 text-[13px]">Load remote images without asking</span>
+          <Switch
+            label="Load remote images without asking"
+            on={loadAll}
+            onChange={(value) => {
+              setLoadAll(value);
+              saveLoadImages(value);
+            }}
+          />
+        </div>
+
+        {imageSenders.length > 0 && (
+          <>
+            <p className="mt-4 mb-2 text-[12.5px] text-ink3">
+              {loadAll ? "Allowed senders, used when this is off." : "Always loaded from these senders."}
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {imageSenders.map((sender) => (
+                <li
+                  key={sender}
+                  className="flex items-center gap-2.5 rounded-xl border border-line bg-chip px-3.5 py-2"
+                >
+                  <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{sender}</span>
+                  <button
+                    type="button"
+                    onClick={() => stopShowingImages(sender)}
+                    className="flex-none rounded-md border border-line px-2 py-0.5 text-[11.5px] text-ink2 transition-colors hover:bg-hover"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </Section>
 

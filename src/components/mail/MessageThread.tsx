@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { showImages } from "@/app/(mail)/actions";
+import { alwaysShowImages, showImages, stopShowingImages } from "@/app/(mail)/actions";
 import {
   BracesIcon,
   ChevronDownIcon,
@@ -14,6 +14,7 @@ import {
 } from "@/components/icons";
 import type { Verdict } from "@/lib/mail/auth";
 import type { Header } from "@/lib/mail/headers";
+import type { ImageRule } from "@/lib/mail/images";
 import { QUOTE_SELECTOR, quotedTextStart } from "@/lib/mail/parts";
 
 export interface ThreadFile {
@@ -40,6 +41,9 @@ export interface ThreadMessage {
   html: string | null;
   text: string | null;
   remoteImages: boolean;
+  images: ImageRule;
+  // Bare address, or null on mail you sent.
+  sender: string | null;
   // Whether the body carries the earlier messages of its thread.
   quoted: boolean;
   files: ThreadFile[];
@@ -343,9 +347,26 @@ function Body({ message, nonce }: { message: ThreadMessage; nonce: string }) {
   const hasHtml = Boolean(message.html);
   const plain = !hasHtml || asPlain;
 
+  const imagesShown = message.images !== null || withImages !== null;
+
   async function load() {
     setLoading(true);
     setWithImages(await showImages(message.id));
+    setLoading(false);
+  }
+
+  // The server redraws the page with the images in, so there is nothing to keep.
+  async function always() {
+    setLoading(true);
+    await alwaysShowImages(message.id);
+    setLoading(false);
+  }
+
+  async function stop() {
+    if (!message.sender) return;
+    setLoading(true);
+    await stopShowingImages(message.sender);
+    setWithImages(null);
     setLoading(false);
   }
 
@@ -368,7 +389,16 @@ function Body({ message, nonce }: { message: ThreadMessage; nonce: string }) {
         ) : (
           <>
             {message.remoteImages && (
-              <Privacy loaded={Boolean(withImages)} loading={loading} onLoad={load} />
+              <Privacy
+                rule={message.images}
+                loaded={withImages !== null}
+                sender={message.sender}
+                failed={message.auth.verdict === "fail"}
+                loading={loading}
+                onLoad={load}
+                onAlways={always}
+                onStop={stop}
+              />
             )}
 
             <div
@@ -383,7 +413,7 @@ function Body({ message, nonce }: { message: ThreadMessage; nonce: string }) {
                 title="Message"
                 srcDoc={
                   BASE +
-                  measure(nonce, withImages !== null) +
+                  measure(nonce, imagesShown) +
                   (message.quoted && !showQuoted ? HIDE_QUOTE : "") +
                   (withImages ?? message.html)
                 }
@@ -441,18 +471,58 @@ function PathStrip({
 }
 
 function Privacy({
+  rule,
   loaded,
+  sender,
+  failed,
   loading,
   onLoad,
+  onAlways,
+  onStop,
 }: {
+  rule: ImageRule;
   loaded: boolean;
+  sender: string | null;
+  failed: boolean;
   loading: boolean;
   onLoad: () => void;
+  onAlways: () => void;
+  onStop: () => void;
 }) {
+  const quiet = "mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-hover px-3 py-1.5 text-[11.5px] text-ink3";
+  const small =
+    "flex-none rounded-md border border-line px-2 py-0.5 text-ink2 transition-colors hover:bg-panel2 disabled:opacity-50";
+
+  if (rule === "all") return null;
+
+  if (rule === "sender") {
+    return (
+      <div className={quiet}>
+        <span className="min-w-0 flex-1">
+          Images from <span className="font-mono">{sender}</span> always load.
+        </span>
+        <button type="button" onClick={onStop} disabled={loading} className={small}>
+          Stop
+        </button>
+      </div>
+    );
+  }
+
+  // Allowing the sender would change nothing for mail that failed, and the
+  // sender is the part in doubt.
+  const canAllow = Boolean(sender) && !failed;
+
+  const alwaysButton = canAllow && (
+    <button type="button" onClick={onAlways} disabled={loading} className={small}>
+      Always from this sender
+    </button>
+  );
+
   if (loaded) {
     return (
-      <div className="mb-2 rounded-lg bg-hover px-3 py-1.5 text-[11.5px] text-ink3">
-        Remote images loaded for this message only.
+      <div className={quiet}>
+        <span className="min-w-0 flex-1">Remote images loaded for this message only.</span>
+        {alwaysButton}
       </div>
     );
   }
@@ -468,7 +538,9 @@ function Privacy({
     >
       <EyeOffIcon className="size-3.5 flex-none" />
       <span className="min-w-0 flex-1">
-        Remote images blocked. Loading them tells the sender you opened this.
+        {failed
+          ? "Remote images blocked. This message failed authentication, so it may not be from who it says."
+          : "Remote images blocked. Loading them tells the sender you opened this."}
       </span>
       <button
         type="button"
@@ -479,6 +551,17 @@ function Privacy({
       >
         Load images
       </button>
+      {canAllow && (
+        <button
+          type="button"
+          onClick={onAlways}
+          disabled={loading}
+          className="flex-none rounded-md border px-2 py-0.5 transition-colors hover:bg-hover disabled:opacity-50"
+          style={{ borderColor: "var(--warn-line)" }}
+        >
+          Always from this sender
+        </button>
+      )}
     </div>
   );
 }
