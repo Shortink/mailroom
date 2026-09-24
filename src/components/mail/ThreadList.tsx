@@ -51,6 +51,10 @@ export async function ThreadList({ box = "inbox", address, unreadOnly, before }:
 
   const title = address ? (localPart(address) ?? address) : TITLES[box];
   const base = address ? `/a/${encodeURIComponent(address)}` : box === "inbox" ? "/" : `/b/${box}`;
+  const query = new URLSearchParams({
+    ...(unreadOnly ? { filter: "unread" } : {}),
+    ...(before ? { before: before.toISOString() } : {}),
+  }).toString();
 
   return (
     <div className="flex w-full flex-none flex-col border-r border-line bg-panel backdrop-blur-[22px] md:w-[374px]">
@@ -92,7 +96,7 @@ export async function ThreadList({ box = "inbox", address, unreadOnly, before }:
       {items.length === 0 ? (
         <EmptyList unreadOnly={unreadOnly} address={address} base={base} trash={box === "trash"} />
       ) : (
-        <ThreadRows items={items} />
+        <ThreadRows items={items} list={query ? `${base}?${query}` : base} />
       )}
 
       <footer className="flex flex-none items-center gap-2 border-t border-line px-4 py-2.5 font-mono text-[10.5px] text-ink3">

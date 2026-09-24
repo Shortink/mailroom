@@ -83,10 +83,19 @@ export async function archiveThread(threadId: string, archived: boolean) {
   revalidatePath("/", "layout");
 }
 
-export async function trashThread(threadId: string, trashed: boolean) {
+export async function trashThread(threadId: string) {
   await requireUser();
-  await setTrashed(threadId, trashed);
+  await setTrashed(threadId, true);
   revalidatePath("/", "layout");
+}
+
+export async function restoreThread(threadId: string) {
+  await requireUser();
+  const restored = await setTrashed(threadId, false);
+  revalidatePath("/", "layout");
+  // Same reason as deleteThread: a push from the client after the refresh
+  // above fell back to reloading the thread instead of leaving it.
+  redirect(restored?.archived ? "/b/archive" : "/");
 }
 
 export async function deleteThread(threadId: string) {

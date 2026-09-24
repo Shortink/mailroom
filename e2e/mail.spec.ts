@@ -113,7 +113,8 @@ test("a deleted thread waits in Trash and can come back", async ({ page }) => {
   await page.getByRole("link", { name: /Marcus Bell:/ }).click();
   await page.getByRole("button", { name: "Restore" }).click();
 
-  await page.getByRole("link", { name: "All mail" }).click();
+  // Back where the thread went, not left looking at Trash.
+  await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toBeVisible();
 });
 
@@ -189,4 +190,39 @@ test("an address moved back to catch-all stays there after its mail is read", as
   await page.reload();
   const catchAll = page.locator("aside section").nth(1);
   await expect(catchAll.getByRole("link", { name: "hi (hi@example.com)" })).toBeVisible();
+});
+
+test("deleting a thread goes back to the list it was opened from", async ({ page }) => {
+  await page.goto("/a/hi%40example.com");
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/a\/hi%40example\.com$/);
+  await expect(page.getByRole("heading", { level: 2 })).toHaveText("hi");
+});
+
+test("archiving keeps the filter the list had", async ({ page }) => {
+  await page.goto("/a/billing%40example.com?filter=unread");
+  await page.getByRole("link", { name: /Stripe:/ }).click();
+  await page.getByRole("button", { name: "Archive" }).click();
+
+  await expect(page).toHaveURL(/\/a\/billing%40example\.com\?filter=unread$/);
+});
+
+test("restoring an archived thread goes to Archive", async ({ page }) => {
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Archive" }).click();
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Trash" }).click();
+  await page.getByRole("link", { name: /Marcus Bell:/ }).click();
+  await page.getByRole("button", { name: "Restore" }).click();
+
+  await expect(page).toHaveURL(/\/b\/archive$/);
+  await expect(page.getByRole("link", { name: /Marcus Bell:/ })).toBeVisible();
 });

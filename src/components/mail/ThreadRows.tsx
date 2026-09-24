@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { ClipIcon } from "@/components/icons";
+import { rememberList } from "./returnTo";
 
 export interface ListItem {
   id: string;
@@ -18,8 +20,10 @@ export interface ListItem {
   hasAttachment: boolean;
 }
 
-export function ThreadRows({ items }: { items: ListItem[] }) {
+export function ThreadRows({ items, list }: { items: ListItem[]; list: string }) {
   const path = usePathname();
+
+  useEffect(() => rememberList(list), [list]);
 
   return (
     <div className="min-h-0 flex-1 scroll-clean">

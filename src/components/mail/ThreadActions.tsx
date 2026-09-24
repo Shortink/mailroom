@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { archiveThread, deleteThread, trashThread } from "@/app/(mail)/actions";
+import { archiveThread, deleteThread, restoreThread, trashThread } from "@/app/(mail)/actions";
 import { useCompose } from "./Compose";
+import { listToReturnTo } from "./returnTo";
 
 interface Props {
   threadId: string;
@@ -43,7 +44,7 @@ export function ThreadActions({
       <div className="ml-auto flex flex-none items-center gap-2">
         <button
           type="button"
-          onClick={() => run(() => trashThread(threadId, false))}
+          onClick={() => run(() => restoreThread(threadId))}
           disabled={pending}
           className={quiet}
         >
@@ -70,7 +71,9 @@ export function ThreadActions({
 
       <button
         type="button"
-        onClick={() => run(() => archiveThread(threadId, !archived), archived ? undefined : "/")}
+        onClick={() =>
+          run(() => archiveThread(threadId, !archived), archived ? undefined : listToReturnTo())
+        }
         disabled={pending}
         className={quiet}
       >
@@ -79,7 +82,7 @@ export function ThreadActions({
 
       <button
         type="button"
-        onClick={() => run(() => trashThread(threadId, true), "/")}
+        onClick={() => run(() => trashThread(threadId), listToReturnTo())}
         disabled={pending}
         className={quiet}
       >

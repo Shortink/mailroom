@@ -6,10 +6,12 @@ import { getStorage } from "../storage";
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export async function setTrashed(threadId: string, trashed: boolean) {
-  await db
+  const [row] = await db
     .update(threads)
     .set({ trashedAt: trashed ? new Date() : null })
-    .where(eq(threads.id, threadId));
+    .where(eq(threads.id, threadId))
+    .returning({ archived: threads.archived });
+  return row ?? null;
 }
 
 export async function deleteForever(threadId: string) {
