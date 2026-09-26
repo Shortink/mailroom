@@ -8,7 +8,7 @@ const password = await rl.question("password: ");
 rl.close();
 
 try {
-  const user = await createUser(email, password);
+  const user = await createUser(email, password, "owner");
   console.log(`created ${user.email}`);
   console.log("Sign in and you will be asked to set up two-factor.");
   process.exit(0);

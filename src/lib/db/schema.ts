@@ -7,6 +7,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -18,6 +19,7 @@ const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
 export const direction = pgEnum("direction", ["inbound", "outbound"]);
 export const messageStatus = pgEnum("message_status", ["pending", "complete", "failed"]);
+export const userRole = pgEnum("user_role", ["owner", "member"]);
 
 export const threads = pgTable(
   "threads",
@@ -30,8 +32,16 @@ export const threads = pgTable(
     archived: boolean("archived").notNull().default(false),
     // The sweep deletes the thread for good thirty days after this.
     trashedAt: timestamp("trashed_at", { withTimezone: true }),
+    // Each address owns its threads: a reply only joins a thread under the
+    // address it was delivered to, and access is checked against this.
+    address: text("address")
+      .notNull()
+      .references(() => addresses.address),
   },
-  (t) => [index("threads_last_message_at_idx").on(t.lastMessageAt.desc())],
+  (t) => [
+    index("threads_last_message_at_idx").on(t.lastMessageAt.desc()),
+    index("threads_address_idx").on(t.address, t.lastMessageAt.desc()),
+  ],
 );
 
 export const messages = pgTable(
@@ -74,8 +84,14 @@ export const messages = pgTable(
     ),
   },
   (t) => [
-    uniqueIndex("messages_resend_id_idx").on(t.resendId),
-    uniqueIndex("messages_message_id_idx").on(t.messageId),
+    uniqueIndex("messages_resend_id_idx").on(t.resendId, t.deliveredTo),
+    // Outbound rows are left out: mail sent to your own address is stored once
+    // as outbound and once as inbound with the same pair.
+    uniqueIndex("messages_message_id_idx")
+      .on(t.deliveredTo, t.messageId)
+      .where(sql`${t.direction} = 'inbound'`),
+    // Threading looks a reply up by the ids it cites, which can be outbound.
+    index("messages_message_id_lookup_idx").on(t.messageId),
     index("messages_thread_idx").on(t.threadId),
     index("messages_inbox_idx").on(t.deliveredTo, t.receivedAt.desc()),
     index("messages_search_idx").using("gin", t.search),
@@ -126,6 +142,10 @@ export const drafts = pgTable("drafts", {
   to: text("to").notNull().default(""),
   subject: text("subject").notNull().default(""),
   body: text("body").notNull().default(""),
+  // Drafts are private to whoever wrote them, owners included.
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -142,8 +162,24 @@ export const users = pgTable("users", {
   // stateless sessions stop verifying.
   sessionVersion: integer("session_version").notNull().default(0),
   loadImages: boolean("load_images").notNull().default(false),
+  // Defaults to member so a row inserted without one can see nothing.
+  role: userRole("role").notNull().default("member"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// The addresses a member reads and sends from. Owners have no rows here.
+export const memberAddresses = pgTable(
+  "member_addresses",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    address: text("address")
+      .notNull()
+      .references(() => addresses.address, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.address] })],
+);
 
 export const securityEvents = pgTable(
   "security_events",
@@ -174,6 +210,8 @@ export const invites = pgTable("invites", {
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  // Copied into member_addresses when the invite is accepted.
+  addresses: text("addresses").array().notNull().default(sql`'{}'`),
 });
 
 export const loginAttempts = pgTable(

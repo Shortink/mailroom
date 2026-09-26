@@ -11,12 +11,13 @@ import {
   updateAddress,
 } from "../../src/lib/mail/addresses";
 import { listInboxes } from "../../src/lib/mail/queries";
+import { newThread } from "../helpers";
 
 async function seedThread(opts: { subject: string; at: string; deliveredTo: string }) {
-  const [thread] = await db
-    .insert(threads)
-    .values({ subject: opts.subject, lastMessageAt: new Date(opts.at) })
-    .returning();
+  const thread = await newThread(opts.deliveredTo, {
+    subject: opts.subject,
+    lastMessageAt: new Date(opts.at),
+  });
 
   await db.insert(messages).values({
     threadId: thread.id,
@@ -29,7 +30,6 @@ async function seedThread(opts: { subject: string; at: string; deliveredTo: stri
     receivedAt: new Date(opts.at),
   });
 
-  await db.insert(addresses).values({ address: opts.deliveredTo }).onConflictDoNothing();
   return thread.id;
 }
 
@@ -110,10 +110,7 @@ describe("archiveStaleThreads", () => {
   it("leaves recent threads in the inbox", async () => {
     await db.insert(addresses).values({ address: "hi@x.test", autoArchive: true });
 
-    const [thread] = await db
-      .insert(threads)
-      .values({ subject: "fresh", lastMessageAt: new Date() })
-      .returning();
+    const thread = await newThread("hi@x.test", { subject: "fresh", lastMessageAt: new Date() });
 
     await db.insert(messages).values({
       threadId: thread.id,

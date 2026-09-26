@@ -13,7 +13,7 @@ import { UNKNOWN_IP, recordAttempt, tooManyAttempts } from "../../src/lib/auth/r
 async function makeUser(email = `u${Math.random()}@example.test`) {
   const [user] = await db
     .insert(users)
-    .values({ email, passwordHash: await hashPassword("correct horse battery") })
+    .values({ email, passwordHash: await hashPassword("correct horse battery"), role: "owner" })
     .returning();
   return user;
 }

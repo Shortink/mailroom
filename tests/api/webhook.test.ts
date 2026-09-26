@@ -102,17 +102,15 @@ describe("resend webhook", () => {
     expect(await db.select().from(threads)).toHaveLength(1);
   });
 
-  it("falls back to the to field when received_for is absent", async () => {
-    const event = {
-      type: "email.received",
-      data: { email_id: "hook-2", to: ["hi@example.test"], from: "s@vendor.test" },
-    };
-
+  it("refuses an event with no envelope recipient and creates nothing", async () => {
+    const { received_for: _drop, ...data } = received.data;
     const { POST } = await route();
-    await POST(post(event));
+    const response = await POST(post({ ...received, data }));
 
-    const [row] = await db.select().from(messages).where(eq(messages.resendId, "hook-2"));
-    expect(row.deliveredTo).toBe("hi@example.test");
+    expect(response.status).toBe(400);
+    expect(await db.select().from(messages)).toHaveLength(0);
+    expect(await db.select().from(threads)).toHaveLength(0);
+    expect(completeIngest).not.toHaveBeenCalled();
   });
 
   it("ignores its own forwarded copies", async () => {
@@ -149,7 +147,12 @@ describe("forward loop guard cannot be forged", () => {
     const { forwardMarker } = await import("../../src/lib/mail/marker");
     const event = {
       type: "email.received",
-      data: { email_id: "mine", to: ["hi@example.test"], headers: { "x-forwarded-by": forwardMarker() } },
+      data: {
+        email_id: "mine",
+        to: ["hi@example.test"],
+        received_for: ["hi@example.test"],
+        headers: { "x-forwarded-by": forwardMarker() },
+      },
     };
 
     const { POST } = await route();
@@ -164,6 +167,7 @@ describe("forward loop guard cannot be forged", () => {
       data: {
         email_id: "forged",
         to: ["hi@example.test"],
+        received_for: ["hi@example.test"],
         headers: { "x-forwarded-by": "resend-mail-client" },
       },
     };

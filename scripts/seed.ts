@@ -22,9 +22,11 @@ await db.execute(sql`truncate table messages, threads, addresses restart identit
 for (const [fromName, from, to, subject, body, daysAgo, unread] of sample) {
   const at = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
 
+  await db.insert(addresses).values({ address: to }).onConflictDoNothing();
+
   const [thread] = await db
     .insert(threads)
-    .values({ subject, lastMessageAt: at, participants: [from, to], messageCount: 1 })
+    .values({ subject, address: to, lastMessageAt: at, participants: [from, to], messageCount: 1 })
     .returning();
 
   await db.insert(messages).values({
@@ -39,8 +41,6 @@ for (const [fromName, from, to, subject, body, daysAgo, unread] of sample) {
     receivedAt: at,
     readAt: unread ? null : at,
   });
-
-  await db.insert(addresses).values({ address: to }).onConflictDoNothing();
 }
 
 // Pin the addresses a real user would have opened by now.

@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
 import { addresses, attachments, messages, threads } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 
 const put = vi.fn();
 vi.mock("../../src/lib/storage", () => ({
@@ -102,7 +103,7 @@ describe("cloudflare inbound", () => {
   });
 
   it("replaces a row left by an attempt that never finished", async () => {
-    const [thread] = await db.insert(threads).values({ subject: "Invoice" }).returning();
+    const thread = await newThread("hi@example.test", { subject: "Invoice" });
     await db.insert(messages).values({
       threadId: thread.id,
       direction: "inbound",

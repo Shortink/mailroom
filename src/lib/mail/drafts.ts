@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { drafts, threads } from "../db/schema";
 
@@ -13,7 +13,7 @@ export interface DraftInput {
 
 // The composer saves as you type, so the first save creates the row and every
 // later one updates it in place.
-export async function saveDraft(input: DraftInput) {
+export async function saveDraft(userId: string, input: DraftInput) {
   const values = {
     threadId: input.threadId ?? null,
     fromAddress: input.from,
@@ -27,12 +27,15 @@ export async function saveDraft(input: DraftInput) {
     const [row] = await db
       .update(drafts)
       .set(values)
-      .where(eq(drafts.id, input.id))
+      .where(and(eq(drafts.id, input.id), eq(drafts.createdBy, userId)))
       .returning({ id: drafts.id });
     if (row) return row.id;
   }
 
-  const [row] = await db.insert(drafts).values(values).returning({ id: drafts.id });
+  const [row] = await db
+    .insert(drafts)
+    .values({ ...values, createdBy: userId })
+    .returning({ id: drafts.id });
   return row.id;
 }
 

@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { Webhook } from "svix";
 import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
-import { messages, threads } from "@/lib/db/schema";
+import { addresses, messages, threads } from "@/lib/db/schema";
 import { completeIngest } from "@/lib/mail/ingest";
 import { forwardMarker } from "@/lib/mail/marker";
 import { MAX_SUBJECT } from "@/lib/mail/limits";
@@ -50,6 +50,10 @@ export async function POST(request: Request) {
   const resendId = event.data.email_id;
   if (!resendId) return new Response("missing email_id", { status: 400 });
 
+  // received_for is the envelope. The To header is whatever the sender wrote.
+  const deliveredTo = event.data.received_for?.[0]?.trim().toLowerCase();
+  if (!deliveredTo) return new Response("missing recipient", { status: 400 });
+
   const created = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: messages.id })
@@ -58,7 +62,11 @@ export async function POST(request: Request) {
     if (existing) return null;
 
     const subject = (event.data.subject ?? "").slice(0, MAX_SUBJECT);
-    const [thread] = await tx.insert(threads).values({ subject }).returning({ id: threads.id });
+    await tx.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
+    const [thread] = await tx
+      .insert(threads)
+      .values({ subject, address: deliveredTo })
+      .returning({ id: threads.id });
 
     const [row] = await tx
       .insert(messages)
@@ -67,7 +75,7 @@ export async function POST(request: Request) {
         direction: "inbound",
         status: "pending",
         resendId,
-        deliveredTo: event.data.received_for?.[0] ?? event.data.to?.[0] ?? null,
+        deliveredTo,
         fromAddress: event.data.from ?? null,
         subject,
       })

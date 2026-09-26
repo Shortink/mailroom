@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { attachments, messages, threads } from "../../src/lib/db/schema";
+import { attachments, messages } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 import { signAttachmentUrl } from "../../src/lib/mail/attachmentLink";
 
 const currentUser = vi.fn();
@@ -30,7 +31,7 @@ beforeEach(async () => {
   get.mockResolvedValue(Buffer.from("%PDF-"));
 
   await db.execute(sql`truncate table messages, threads, attachments restart identity cascade`);
-  const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
+  const thread = await newThread("hi@example.test", { subject: "t" });
   const [message] = await db
     .insert(messages)
     .values({ threadId: thread.id, direction: "inbound", status: "complete" })

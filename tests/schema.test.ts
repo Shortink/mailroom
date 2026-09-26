@@ -2,17 +2,23 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "../src/lib/db/client";
 import { messages, threads } from "../src/lib/db/schema";
+import { newThread } from "./helpers";
 
 let threadId: string;
 
 beforeAll(async () => {
-  const [t] = await db.insert(threads).values({ subject: "seed" }).returning();
+  const t = await newThread("hi@example.test", { subject: "seed" });
   threadId = t.id;
 });
 
 describe("messages", () => {
   it("collapses duplicate resend_id inserts", async () => {
-    const row = { threadId, resendId: "dup-1", direction: "inbound" as const };
+    const row = {
+      threadId,
+      resendId: "dup-1",
+      deliveredTo: "hi@example.test",
+      direction: "inbound" as const,
+    };
     await db.insert(messages).values(row).onConflictDoNothing();
     await db.insert(messages).values(row).onConflictDoNothing();
     const found = await db.select().from(messages).where(eq(messages.resendId, "dup-1"));
@@ -46,7 +52,7 @@ describe("messages", () => {
   });
 
   it("removes messages when their thread is deleted", async () => {
-    const [t] = await db.insert(threads).values({ subject: "temp" }).returning();
+    const t = await newThread("hi@example.test", { subject: "temp" });
     await db.insert(messages).values({ threadId: t.id, direction: "inbound", resendId: "cascade-1" });
     await db.delete(threads).where(eq(threads.id, t.id));
     const found = await db.select().from(messages).where(eq(messages.resendId, "cascade-1"));

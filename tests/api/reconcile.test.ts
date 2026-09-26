@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { messages, threads } from "../../src/lib/db/schema";
+import { messages } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 import { CLAIM_MS } from "../../src/lib/mail/limits";
 
 const completeIngest = vi.fn();
@@ -39,7 +40,7 @@ async function seed(
     status?: "pending" | "complete" | "failed";
   }[],
 ) {
-  const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
+  const thread = await newThread("hi@example.test", { subject: "t" });
   await db.insert(messages).values(
     rows.map((row) => ({
       threadId: thread.id,
@@ -134,7 +135,7 @@ describe("reconcile", () => {
 describe("reconcile dispatch", () => {
   it("captures message ids for outbound rows instead of re-ingesting them", async () => {
     const stale = new Date(Date.now() - CLAIM_MS - 60 * 1000);
-    const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
+    const thread = await newThread("hi@example.test", { subject: "t" });
     await db.insert(messages).values({
       threadId: thread.id,
       direction: "outbound",

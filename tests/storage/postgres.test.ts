@@ -1,5 +1,6 @@
 import { db } from "../../src/lib/db/client";
-import { attachments, messages, threads } from "../../src/lib/db/schema";
+import { attachments, messages } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 import { PostgresStorage } from "../../src/lib/storage/postgres";
 import { testStorage } from "./conformance";
 
@@ -9,7 +10,7 @@ let seeded = false;
 // The driver updates rows the ingest pipeline creates, so the keys must exist.
 async function make() {
   if (!seeded) {
-    const [thread] = await db.insert(threads).values({ subject: "storage" }).returning();
+    const thread = await newThread("hi@example.test", { subject: "storage" });
     const [message] = await db
       .insert(messages)
       .values({ threadId: thread.id, direction: "inbound" })

@@ -36,6 +36,13 @@ describe("first-run setup", () => {
     );
   });
 
+  it("makes the first user an owner", async () => {
+    await createFirstUser("first@example.test", "correct horse battery");
+    const [user] = await db.select().from(users);
+
+    expect(user.role).toBe("owner");
+  });
+
   it("stores the password hashed", async () => {
     await createFirstUser("first@example.test", "correct horse battery");
     const [user] = await db.select().from(users);
@@ -66,6 +73,7 @@ describe("invites", () => {
 
     const [user] = await db.select().from(users).where(eq(users.email, "second@example.test"));
     expect(user).toBeDefined();
+    expect(user.role).toBe("member");
     expect(await verifyPassword(user.passwordHash, "another good password")).toBe(true);
   });
 
@@ -96,12 +104,12 @@ describe("invites", () => {
 
 describe("createUser", () => {
   it("normalises the email so login is not case sensitive", async () => {
-    await createUser("Mixed@Example.Test", "correct horse battery");
+    await createUser("Mixed@Example.Test", "correct horse battery", "owner");
     const [user] = await db.select().from(users);
     expect(user.email).toBe("mixed@example.test");
   });
 
   it("rejects a short password", async () => {
-    await expect(createUser("a@example.test", "short")).rejects.toThrow(/8 characters/);
+    await expect(createUser("a@example.test", "short", "owner")).rejects.toThrow(/8 characters/);
   });
 });

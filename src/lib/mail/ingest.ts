@@ -69,6 +69,9 @@ export async function completeIngest(messageId: string) {
 // Mail that arrived whole. Nothing is fetched afterwards, so it finishes inside
 // the request rather than through the pending state the sweep watches.
 export async function ingestParsed(mail: InboundMail) {
+  const deliveredTo = mail.receivedFor?.trim().toLowerCase();
+  if (!deliveredTo) throw new Error("No envelope recipient.");
+
   if (mail.messageId) {
     const [existing] = await db
       .select({ id: messages.id, ingestedAt: messages.ingestedAt })
@@ -82,7 +85,11 @@ export async function ingestParsed(mail: InboundMail) {
 
   const subject = (mail.subject ?? "").slice(0, MAX_SUBJECT);
 
-  const [thread] = await db.insert(threads).values({ subject }).returning({ id: threads.id });
+  await db.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
+  const [thread] = await db
+    .insert(threads)
+    .values({ subject, address: deliveredTo })
+    .returning({ id: threads.id });
 
   const [row] = await db
     .insert(messages)
@@ -91,7 +98,7 @@ export async function ingestParsed(mail: InboundMail) {
       direction: "inbound",
       status: "pending",
       messageId: mail.messageId,
-      deliveredTo: mail.receivedFor,
+      deliveredTo,
       fromAddress: mail.from,
       subject,
     })

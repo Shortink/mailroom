@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { messages, threads } from "../../src/lib/db/schema";
+import { messages } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 
 const completeIngest = vi.fn();
 vi.mock("../../src/lib/mail/ingest", () => ({
@@ -18,7 +19,7 @@ beforeEach(async () => {
 });
 
 async function failedMessage() {
-  const [thread] = await db.insert(threads).values({ subject: "t" }).returning();
+  const thread = await newThread("hi@example.test", { subject: "t" });
   const [row] = await db
     .insert(messages)
     .values({

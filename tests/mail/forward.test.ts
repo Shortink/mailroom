@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { messages, threads } from "../../src/lib/db/schema";
+import { messages } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 
 const sendEmail = vi.fn();
 vi.mock("../../src/lib/mail/resend", () => ({
@@ -11,7 +12,7 @@ vi.mock("../../src/lib/mail/resend", () => ({
 const { forwardCopy } = await import("../../src/lib/mail/forward");
 
 async function seed(overrides: Record<string, unknown> = {}) {
-  const [thread] = await db.insert(threads).values({ subject: "Invoice" }).returning();
+  const thread = await newThread("hi@example.test", { subject: "Invoice" });
   const [row] = await db
     .insert(messages)
     .values({

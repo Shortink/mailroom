@@ -45,9 +45,12 @@ export async function sendReply(input: Outgoing & { threadId: string }) {
 }
 
 export async function sendNew(input: Outgoing) {
+  await db.insert(addresses).values({ address: input.from }).onConflictDoNothing();
+
   const [thread] = await db
     .insert(threads)
     .values({
+      address: input.from,
       subject: input.subject,
       participants: [input.from, ...input.to],
       messageCount: 1,

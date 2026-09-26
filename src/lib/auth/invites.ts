@@ -67,7 +67,7 @@ export async function acceptInvite(token: string, email: string, password: strin
   if (claimed.length === 0) throw new Error("That invite is no longer valid.");
 
   try {
-    return await createUser(email, password);
+    return await createUser(email, password, "member");
   } catch (error) {
     // Hand the invite back if the account could not be created.
     await db.update(invites).set({ acceptedAt: null }).where(eq(invites.id, invite.id));

@@ -108,14 +108,14 @@ export async function deleteThread(threadId: string) {
 }
 
 export async function storeDraft(input: DraftInput) {
-  await requireUser();
+  const userId = await requireUser();
 
   // The composer autosaves on every pause in typing, so an unbounded body
   // grows the table for as long as someone keeps writing.
   const parsed = draft.safeParse(input);
   if (!parsed.success) return null;
 
-  const id = await saveDraft(parsed.data);
+  const id = await saveDraft(userId, parsed.data);
   revalidatePath("/", "layout");
   return id;
 }

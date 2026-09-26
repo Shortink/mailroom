@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
 import { addresses, messages, threads } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 
 const sendEmail = vi.fn();
 const getEmail = vi.fn();
@@ -15,10 +16,10 @@ vi.mock("../../src/lib/mail/forward", () => ({ forwardCopy: vi.fn() }));
 const { captureMessageId, sendNew, sendReply } = await import("../../src/lib/mail/send");
 
 async function seedThread() {
-  const [thread] = await db
-    .insert(threads)
-    .values({ subject: "Invoice", participants: ["billing@vendor.test"] })
-    .returning();
+  const thread = await newThread("hi@example.test", {
+    subject: "Invoice",
+    participants: ["billing@vendor.test"],
+  });
 
   await db.insert(messages).values({
     threadId: thread.id,
@@ -74,7 +75,7 @@ describe("sendReply", () => {
   });
 
   it("omits threading headers when no prior message has an id", async () => {
-    const [thread] = await db.insert(threads).values({ subject: "New" }).returning();
+    const thread = await newThread("hi@example.test", { subject: "New" });
 
     await sendReply({
       threadId: thread.id, from: "hi@example.test", to: ["x@vendor.test"],

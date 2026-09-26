@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
 import { addresses, attachments, messages, threads } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 
 const getReceivedEmail = vi.fn();
 const getAttachment = vi.fn();
@@ -25,8 +26,9 @@ vi.mock("../../src/lib/storage", () => ({
 
 const { completeIngest } = await import("../../src/lib/mail/ingest");
 
-async function pending(resendId: string, overrides: Record<string, unknown> = {}) {
-  const [thread] = await db.insert(threads).values({ subject: "" }).returning();
+async function pending(resendId: string, overrides: Partial<typeof messages.$inferInsert> = {}) {
+  const deliveredTo = overrides.deliveredTo ?? "hi@example.test";
+  const thread = await newThread(deliveredTo, { subject: "" });
   const [row] = await db
     .insert(messages)
     .values({
@@ -34,8 +36,8 @@ async function pending(resendId: string, overrides: Record<string, unknown> = {}
       direction: "inbound",
       status: "pending",
       resendId,
-      deliveredTo: "hi@example.test",
       ...overrides,
+      deliveredTo,
     })
     .returning();
   return row;
@@ -84,10 +86,10 @@ describe("completeIngest", () => {
   });
 
   it("attaches to an existing thread by in-reply-to and drops the placeholder", async () => {
-    const [existing] = await db
-      .insert(threads)
-      .values({ subject: "Invoice", participants: ["billing@vendor.test", "hi@example.test"] })
-      .returning();
+    const existing = await newThread("hi@example.test", {
+      subject: "Invoice",
+      participants: ["billing@vendor.test", "hi@example.test"],
+    });
     await db.insert(messages).values({
       threadId: existing.id,
       direction: "inbound",
@@ -114,14 +116,11 @@ describe("completeIngest", () => {
   });
 
   it("starts a thread of its own when the one it replies to is in Trash", async () => {
-    const [trashed] = await db
-      .insert(threads)
-      .values({
-        subject: "Invoice",
-        participants: ["billing@vendor.test", "hi@example.test"],
-        trashedAt: new Date(),
-      })
-      .returning();
+    const trashed = await newThread("hi@example.test", {
+      subject: "Invoice",
+      participants: ["billing@vendor.test", "hi@example.test"],
+      trashedAt: new Date(),
+    });
     await db.insert(messages).values({
       threadId: trashed.id,
       direction: "inbound",
@@ -146,10 +145,10 @@ describe("completeIngest", () => {
   // The delivered-to address is a participant on every thread, so it cannot be
   // the thing that proves a message belongs to one.
   it("refuses a stranger quoting a message id from someone else's thread", async () => {
-    const [existing] = await db
-      .insert(threads)
-      .values({ subject: "Invoice", participants: ["billing@vendor.test", "hi@example.test"] })
-      .returning();
+    const existing = await newThread("hi@example.test", {
+      subject: "Invoice",
+      participants: ["billing@vendor.test", "hi@example.test"],
+    });
     await db.insert(messages).values({
       threadId: existing.id,
       direction: "inbound",
@@ -173,10 +172,10 @@ describe("completeIngest", () => {
   });
 
   it("attaches by subject and participant when headers are missing", async () => {
-    const [existing] = await db
-      .insert(threads)
-      .values({ subject: "Quarterly report", participants: ["billing@vendor.test"] })
-      .returning();
+    const existing = await newThread("hi@example.test", {
+      subject: "Quarterly report",
+      participants: ["billing@vendor.test"],
+    });
 
     getReceivedEmail.mockResolvedValue({
       id: "r4",

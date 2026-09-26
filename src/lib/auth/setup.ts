@@ -16,8 +16,8 @@ export async function createFirstUser(email: string, password: string) {
 
   const hash = await hashPassword(password);
   const rows = await db.execute<{ id: string }>(sql`
-    insert into users (email, password_hash)
-    select ${email.trim().toLowerCase()}, ${hash}
+    insert into users (email, password_hash, role)
+    select ${email.trim().toLowerCase()}, ${hash}, 'owner'
     where not exists (select 1 from users)
     returning id
   `);

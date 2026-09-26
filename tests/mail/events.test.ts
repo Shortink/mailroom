@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { messages, threads } from "../../src/lib/db/schema";
+import { messages } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 import { mailArrived, onMailArrived } from "../../src/lib/mail/events";
 
 const getReceivedEmail = vi.fn();
@@ -42,7 +43,7 @@ describe("mail events", () => {
   });
 
   it("fires once ingest has made a message visible", async () => {
-    const [thread] = await db.insert(threads).values({ subject: "" }).returning();
+    const thread = await newThread("hi@x.test", { subject: "" });
     const [row] = await db
       .insert(messages)
       .values({ threadId: thread.id, direction: "inbound", status: "pending", resendId: "re_1" })
@@ -68,7 +69,7 @@ describe("mail events", () => {
   });
 
   it("stays quiet when ingest could not fetch the message", async () => {
-    const [thread] = await db.insert(threads).values({ subject: "" }).returning();
+    const thread = await newThread("hi@x.test", { subject: "" });
     const [row] = await db
       .insert(messages)
       .values({ threadId: thread.id, direction: "inbound", status: "pending", resendId: "re_2" })

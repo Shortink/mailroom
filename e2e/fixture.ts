@@ -26,21 +26,24 @@ export async function resetDatabase() {
   await db.execute(sql`
     truncate table
       messages, threads, attachments, addresses, drafts, image_senders,
-      users, recovery_codes, invites, login_attempts
+      users, member_addresses, recovery_codes, invites, login_attempts
     restart identity cascade
   `);
 
   await db.insert(users).values({
     email: OPERATOR.email,
     passwordHash: await hashPassword(OPERATOR.password),
+    role: "owner",
   });
 
   for (const [fromName, from, to, subject, body, daysAgo, unread] of SAMPLE) {
     const at = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
 
+    await db.insert(addresses).values({ address: to }).onConflictDoNothing();
+
     const [thread] = await db
       .insert(threads)
-      .values({ subject, lastMessageAt: at, participants: [from, to], messageCount: 1 })
+      .values({ subject, address: to, lastMessageAt: at, participants: [from, to], messageCount: 1 })
       .returning();
 
     await db.insert(messages).values({
@@ -55,8 +58,6 @@ export async function resetDatabase() {
       receivedAt: at,
       readAt: unread ? null : at,
     });
-
-    await db.insert(addresses).values({ address: to }).onConflictDoNothing();
   }
 
   await db.execute(
@@ -71,10 +72,12 @@ export async function seedHtmlMessage(
   extra: { headers?: Record<string, string>; dmarc?: string } = {},
 ) {
   const at = new Date();
+  await db.insert(addresses).values({ address: "hi@example.com" }).onConflictDoNothing();
   const [thread] = await db
     .insert(threads)
     .values({
       subject: "Rendered as html",
+      address: "hi@example.com",
       lastMessageAt: at,
       participants: ["sender@html.example", "hi@example.com"],
       messageCount: 1,

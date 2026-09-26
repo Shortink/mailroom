@@ -71,6 +71,13 @@
       "when": 1790112173820,
       "tag": "0009_tranquil_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790461716512,
+      "tag": "0010_daffy_raider",
+      "breakpoints": true
     }
   ]
 }

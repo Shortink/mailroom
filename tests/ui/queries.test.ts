@@ -10,6 +10,7 @@ import {
   registerAccount,
   searchThreads,
 } from "../../src/lib/mail/queries";
+import { newThread } from "../helpers";
 
 async function seedThread(opts: {
   subject: string;
@@ -18,10 +19,10 @@ async function seedThread(opts: {
   unread?: boolean;
   body?: string;
 }) {
-  const [thread] = await db
-    .insert(threads)
-    .values({ subject: opts.subject, lastMessageAt: new Date(opts.at) })
-    .returning();
+  const thread = await newThread(opts.deliveredTo, {
+    subject: opts.subject,
+    lastMessageAt: new Date(opts.at),
+  });
 
   await db.insert(messages).values({
     threadId: thread.id,
@@ -35,7 +36,6 @@ async function seedThread(opts: {
     readAt: opts.unread ? null : new Date(),
   });
 
-  await db.insert(addresses).values({ address: opts.deliveredTo }).onConflictDoNothing();
   return thread.id;
 }
 

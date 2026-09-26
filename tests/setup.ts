@@ -8,7 +8,7 @@ beforeAll(async () => {
   await db.execute(sql`
     truncate table
       messages, threads, attachments, addresses, drafts, image_senders,
-      users, recovery_codes, invites, login_attempts
+      users, member_addresses, recovery_codes, invites, login_attempts
     restart identity cascade
   `);
 });

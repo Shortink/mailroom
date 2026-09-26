@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { addresses, attachments, messages, threads } from "../../src/lib/db/schema";
+import { attachments, messages, threads } from "../../src/lib/db/schema";
+import { newThread } from "../helpers";
 
 const remove = vi.fn();
 vi.mock("../../src/lib/storage", () => ({
@@ -14,10 +15,11 @@ const { deleteForever, emptyOldTrash, setTrashed } = await import("../../src/lib
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 async function seedThread(subject: string, opts: { archived?: boolean; trashedAt?: Date } = {}) {
-  const [thread] = await db
-    .insert(threads)
-    .values({ subject, archived: opts.archived ?? false, trashedAt: opts.trashedAt ?? null })
-    .returning();
+  const thread = await newThread("hi@x.test", {
+    subject,
+    archived: opts.archived ?? false,
+    trashedAt: opts.trashedAt ?? null,
+  });
 
   const [message] = await db
     .insert(messages)
@@ -32,7 +34,6 @@ async function seedThread(subject: string, opts: { archived?: boolean; trashedAt
     })
     .returning();
 
-  await db.insert(addresses).values({ address: "hi@x.test" }).onConflictDoNothing();
   return { threadId: thread.id, messageId: message.id };
 }
 
