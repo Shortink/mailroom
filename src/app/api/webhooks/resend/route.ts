@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { after } from "next/server";
 import { Webhook } from "svix";
 import { requireEnv } from "@/lib/env";
@@ -14,7 +14,6 @@ interface ReceivedEvent {
   type: string;
   data: {
     email_id?: string;
-    to?: string[];
     received_for?: string[];
     from?: string;
     subject?: string;
@@ -51,40 +50,46 @@ export async function POST(request: Request) {
   if (!resendId) return new Response("missing email_id", { status: 400 });
 
   // received_for is the envelope. The To header is whatever the sender wrote.
-  const deliveredTo = event.data.received_for?.[0]?.trim().toLowerCase();
-  if (!deliveredTo) return new Response("missing recipient", { status: 400 });
+  const recipients = [
+    ...new Set((event.data.received_for ?? []).map((address) => address.trim().toLowerCase())),
+  ].filter(Boolean);
+  if (recipients.length === 0) return new Response("missing recipient", { status: 400 });
 
-  const created = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ id: messages.id })
-      .from(messages)
-      .where(eq(messages.resendId, resendId));
-    if (existing) return null;
+  const subject = (event.data.subject ?? "").slice(0, MAX_SUBJECT);
 
-    const subject = (event.data.subject ?? "").slice(0, MAX_SUBJECT);
-    await tx.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
-    const [thread] = await tx
-      .insert(threads)
-      .values({ subject, address: deliveredTo })
-      .returning({ id: threads.id });
+  // Each recipient is its own delivery, with its own thread and its own row.
+  for (const deliveredTo of recipients) {
+    const created = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select({ id: messages.id })
+        .from(messages)
+        .where(and(eq(messages.resendId, resendId), eq(messages.deliveredTo, deliveredTo)));
+      if (existing) return null;
 
-    const [row] = await tx
-      .insert(messages)
-      .values({
-        threadId: thread.id,
-        direction: "inbound",
-        status: "pending",
-        resendId,
-        deliveredTo,
-        fromAddress: event.data.from ?? null,
-        subject,
-      })
-      .returning({ id: messages.id });
+      await tx.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
+      const [thread] = await tx
+        .insert(threads)
+        .values({ subject, address: deliveredTo })
+        .returning({ id: threads.id });
 
-    return row;
-  });
+      const [row] = await tx
+        .insert(messages)
+        .values({
+          threadId: thread.id,
+          direction: "inbound",
+          status: "pending",
+          resendId,
+          deliveredTo,
+          fromAddress: event.data.from ?? null,
+          subject,
+        })
+        .returning({ id: messages.id });
 
-  if (created) after(() => completeIngest(created.id));
+      return row;
+    });
+
+    if (created) after(() => completeIngest(created.id));
+  }
 
   return new Response("ok", { status: 200 });
 }

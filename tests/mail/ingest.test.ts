@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
 import { addresses, attachments, messages, threads } from "../../src/lib/db/schema";
+import type { InboundMail } from "../../src/lib/mail/inbound";
 import { newThread } from "../helpers";
 
 const getReceivedEmail = vi.fn();
@@ -24,7 +25,7 @@ vi.mock("../../src/lib/storage", () => ({
   getStorage: () => ({ put, get: vi.fn(), delete: vi.fn(), url: (k: string) => `/a/${k}` }),
 }));
 
-const { completeIngest } = await import("../../src/lib/mail/ingest");
+const { completeIngest, ingestParsed } = await import("../../src/lib/mail/ingest");
 
 async function pending(resendId: string, overrides: Partial<typeof messages.$inferInsert> = {}) {
   const deliveredTo = overrides.deliveredTo ?? "hi@example.test";
@@ -78,7 +79,7 @@ describe("completeIngest", () => {
   it("registers the delivered address so it appears as an inbox", async () => {
     getReceivedEmail.mockResolvedValue({ id: "r2", subject: "Hi", received_for: ["billing@example.test"] });
 
-    const row = await pending("r2");
+    const row = await pending("r2", { deliveredTo: "billing@example.test" });
     await completeIngest(row.id);
 
     const found = await db.select().from(addresses).where(eq(addresses.address, "billing@example.test"));
@@ -266,5 +267,127 @@ describe("completeIngest", () => {
 
     const [done] = await db.select().from(messages).where(eq(messages.id, row.id));
     expect(done.ingestedAt).not.toBeNull();
+  });
+
+  it("files under the row's own address, not Resend's first received_for", async () => {
+    const row = await pending("own-1", { deliveredTo: "billing@example.test" });
+    getReceivedEmail.mockResolvedValue({
+      id: "own-1",
+      from: "s@vendor.test",
+      to: ["hi@example.test"],
+      received_for: ["hi@example.test", "billing@example.test"],
+      subject: "Invoice",
+      text: "x",
+      headers: {},
+    });
+
+    await completeIngest(row.id);
+
+    const [stored] = await db
+      .select({ deliveredTo: messages.deliveredTo, address: threads.address })
+      .from(messages)
+      .innerJoin(threads, eq(threads.id, messages.threadId))
+      .where(eq(messages.id, row.id));
+    expect(stored).toEqual({ deliveredTo: "billing@example.test", address: "billing@example.test" });
+  });
+});
+
+function parsed(overrides: Partial<InboundMail> = {}): InboundMail {
+  return {
+    headers: {},
+    from: "sender@vendor.test",
+    to: ["hi@example.test"],
+    cc: [],
+    receivedFor: "hi@example.test",
+    subject: "Hello",
+    text: "body",
+    html: null,
+    messageId: "<m1@vendor.test>",
+    attachments: [],
+    ...overrides,
+  };
+}
+
+describe("ingestParsed by address", () => {
+  it("lands a message to two addresses twice, once in each address's thread", async () => {
+    await ingestParsed(parsed({ receivedFor: "hi@example.test" }));
+    await ingestParsed(parsed({ receivedFor: "sales@example.test" }));
+    await ingestParsed(parsed({ receivedFor: "hi@example.test" }));
+    await ingestParsed(parsed({ receivedFor: "sales@example.test" }));
+
+    const rows = await db
+      .select({ deliveredTo: messages.deliveredTo, address: threads.address })
+      .from(messages)
+      .innerJoin(threads, eq(threads.id, messages.threadId))
+      .orderBy(messages.deliveredTo);
+
+    expect(rows).toEqual([
+      { deliveredTo: "hi@example.test", address: "hi@example.test" },
+      { deliveredTo: "sales@example.test", address: "sales@example.test" },
+    ]);
+  });
+
+  it("keeps the outbound copy when mail to your own address comes back in", async () => {
+    const thread = await newThread("you@example.test", { subject: "Note to self" });
+    await db.insert(messages).values({
+      threadId: thread.id,
+      direction: "outbound",
+      status: "complete",
+      deliveredTo: "you@example.test",
+      fromAddress: "you@example.test",
+      messageId: "<self@example.test>",
+    });
+
+    await ingestParsed(
+      parsed({ receivedFor: "you@example.test", from: "you@example.test", messageId: "<self@example.test>" }),
+    );
+
+    const rows = await db.select({ direction: messages.direction }).from(messages).orderBy(messages.direction);
+    expect(rows.map((row) => row.direction)).toEqual(["inbound", "outbound"]);
+  });
+
+  it("files a mixed-case recipient under the lowercase address", async () => {
+    await ingestParsed(parsed({ receivedFor: "Alex@Example.test" }));
+
+    const [row] = await db
+      .select({ deliveredTo: messages.deliveredTo, address: threads.address })
+      .from(messages)
+      .innerJoin(threads, eq(threads.id, messages.threadId));
+    expect(row).toEqual({ deliveredTo: "alex@example.test", address: "alex@example.test" });
+
+    const rows = await db.select({ address: addresses.address }).from(addresses);
+    expect(rows.map((r) => r.address)).toContain("alex@example.test");
+    expect(rows.map((r) => r.address)).not.toContain("Alex@Example.test");
+  });
+
+  it("never joins a reply to another address's thread", async () => {
+    const original = await newThread("you@example.test", {
+      subject: "Plans",
+      participants: ["sender@vendor.test", "you@example.test"],
+    });
+    await db.insert(messages).values({
+      threadId: original.id,
+      direction: "inbound",
+      status: "complete",
+      deliveredTo: "you@example.test",
+      fromAddress: "sender@vendor.test",
+      messageId: "<orig@vendor.test>",
+      subject: "Plans",
+    });
+
+    await ingestParsed(
+      parsed({
+        receivedFor: "alex@example.test",
+        to: ["alex@example.test", "you@example.test"],
+        subject: "Re: Plans",
+        messageId: "<reply@vendor.test>",
+        headers: { "in-reply-to": "<orig@vendor.test>", references: "<orig@vendor.test>" },
+      }),
+    );
+
+    const [youThread] = await db.select().from(threads).where(eq(threads.id, original.id));
+    expect(youThread.messageCount).toBe(0);
+    const alex = await db.select().from(threads).where(eq(threads.address, "alex@example.test"));
+    expect(alex).toHaveLength(1);
   });
 });

@@ -113,6 +113,33 @@ describe("resend webhook", () => {
     expect(completeIngest).not.toHaveBeenCalled();
   });
 
+  it("files one copy per envelope recipient, lowercased", async () => {
+    const { POST } = await route();
+    await POST(post({ ...received, data: { ...received.data, received_for: ["billing@example.test", "Hi@Example.test"] } }));
+
+    const rows = await db
+      .select({ deliveredTo: messages.deliveredTo, address: threads.address })
+      .from(messages)
+      .innerJoin(threads, eq(threads.id, messages.threadId))
+      .orderBy(messages.deliveredTo);
+    expect(rows).toEqual([
+      { deliveredTo: "billing@example.test", address: "billing@example.test" },
+      { deliveredTo: "hi@example.test", address: "hi@example.test" },
+    ]);
+    expect(completeIngest).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates nothing on a repeat delivery of either recipient", async () => {
+    const both = { ...received, data: { ...received.data, received_for: ["billing@example.test", "hi@example.test"] } };
+    const { POST } = await route();
+    await POST(post(both));
+    completeIngest.mockReset();
+    await POST(post(both));
+
+    expect(await db.select().from(messages)).toHaveLength(2);
+    expect(completeIngest).not.toHaveBeenCalled();
+  });
+
   it("ignores its own forwarded copies", async () => {
     const { forwardMarker } = await import("../../src/lib/mail/marker");
     const event = {

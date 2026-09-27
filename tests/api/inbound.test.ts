@@ -108,6 +108,7 @@ describe("cloudflare inbound", () => {
       threadId: thread.id,
       direction: "inbound",
       status: "pending",
+      deliveredTo: "hi@example.test",
       messageId: "<inv-1@vendor.test>",
     });
 

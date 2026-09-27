@@ -73,10 +73,18 @@ export async function ingestParsed(mail: InboundMail) {
   if (!deliveredTo) throw new Error("No envelope recipient.");
 
   if (mail.messageId) {
+    // Outbound rows carry the same pair when mail goes to your own address, so
+    // only inbound counts as already received.
     const [existing] = await db
       .select({ id: messages.id, ingestedAt: messages.ingestedAt })
       .from(messages)
-      .where(eq(messages.messageId, mail.messageId));
+      .where(
+        and(
+          eq(messages.deliveredTo, deliveredTo),
+          eq(messages.messageId, mail.messageId),
+          eq(messages.direction, "inbound"),
+        ),
+      );
     if (existing?.ingestedAt) return existing.id;
 
     // Left by an attempt that failed part way.
@@ -162,7 +170,12 @@ async function land(row: Row, mail: InboundMail) {
     .slice(0, MAX_REFERENCES);
   const inReplyTo = headers["in-reply-to"] ?? null;
   const subject = (mail.subject ?? row.subject).slice(0, MAX_SUBJECT);
-  const deliveredTo = mail.receivedFor ?? row.deliveredTo;
+  // The thread a message was first filed under is its delivery address.
+  const [own] = await db
+    .select({ address: threads.address })
+    .from(threads)
+    .where(eq(threads.id, row.threadId));
+  const deliveredTo = own.address;
   const fromAddress = mail.from ?? row.fromAddress;
 
   const participants = [fromAddress, deliveredTo, ...mail.to].filter(
@@ -170,11 +183,12 @@ async function land(row: Row, mail: InboundMail) {
   );
   // Everything arrives at one domain, so this is what tells an operator
   // address from a stranger's.
-  const domain = deliveredTo?.split("@")[1]?.toLowerCase() ?? "";
+  const domain = deliveredTo.split("@")[1]?.toLowerCase() ?? "";
 
   const threadId = await resolveAndAttach({
     incoming: { inReplyTo, references, subject, participants, domain, receivedAt: row.receivedAt },
     placeholderThreadId: row.threadId,
+    address: deliveredTo,
   });
 
   await db
@@ -222,14 +236,14 @@ async function land(row: Row, mail: InboundMail) {
       participants: [...new Set([...(thread?.participants ?? []), ...participants])],
     })
     .where(eq(threads.id, threadId));
-
-  if (deliveredTo) {
-    await db.insert(addresses).values({ address: deliveredTo }).onConflictDoNothing();
-  }
 }
 
-async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId: string }) {
-  const { incoming, placeholderThreadId } = input;
+async function resolveAndAttach(input: {
+  incoming: Incoming;
+  placeholderThreadId: string;
+  address: string;
+}) {
+  const { incoming, placeholderThreadId, address } = input;
 
   // A reply to something in Trash starts a thread of its own. Joining the old
   // one would file new mail straight into Trash, and the sweep would delete it.
@@ -246,7 +260,13 @@ async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId
         })
         .from(messages)
         .innerJoin(threads, eq(threads.id, messages.threadId))
-        .where(and(inArray(messages.messageId, referenced), isNull(threads.trashedAt)))) as {
+        .where(
+          and(
+            inArray(messages.messageId, referenced),
+            isNull(threads.trashedAt),
+            eq(threads.address, address),
+          ),
+        )) as {
         messageId: string;
         threadId: string;
         participants: string[];
@@ -264,7 +284,9 @@ async function resolveAndAttach(input: { incoming: Incoming; placeholderThreadId
       lastMessageAt: threads.lastMessageAt,
     })
     .from(threads)
-    .where(and(gte(threads.lastMessageAt, cutoff), isNull(threads.trashedAt)))
+    .where(
+      and(gte(threads.lastMessageAt, cutoff), isNull(threads.trashedAt), eq(threads.address, address)),
+    )
     .limit(CANDIDATE_LIMIT);
 
   const wanted = normalizeSubject(incoming.subject);
