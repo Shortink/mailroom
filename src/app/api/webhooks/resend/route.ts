@@ -4,6 +4,7 @@ import { Webhook } from "svix";
 import { requireEnv } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { addresses, messages, threads } from "@/lib/db/schema";
+import { normalizeAddress } from "@/lib/mail/identity";
 import { completeIngest } from "@/lib/mail/ingest";
 import { forwardMarker } from "@/lib/mail/marker";
 import { MAX_SUBJECT } from "@/lib/mail/limits";
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
 
   // received_for is the envelope. The To header is whatever the sender wrote.
   const recipients = [
-    ...new Set((event.data.received_for ?? []).map((address) => address.trim().toLowerCase())),
+    ...new Set((event.data.received_for ?? []).map(normalizeAddress)),
   ].filter(Boolean);
   if (recipients.length === 0) return new Response("missing recipient", { status: 400 });
 

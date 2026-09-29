@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { record } from "@/lib/auth/audit";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { deleteDraft, saveDraft, type DraftInput } from "@/lib/mail/drafts";
 import { retryFailed } from "@/lib/mail/reconcile";
 import { draft, outgoing } from "@/lib/mail/limits";
@@ -37,7 +37,7 @@ export type { SearchScope };
 export type SendResult = { ok: true; id: string; from: string } | { ok: false; error: string };
 
 export async function sendMessage(input: SendInput): Promise<SendResult> {
-  const userId = await requireUser();
+  const viewer = await requireViewer();
 
   const parsed = outgoing.safeParse({
     from: input.from.trim(),
@@ -66,7 +66,7 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
     if (input.draftId) await deleteDraft(input.draftId);
 
     await record("message.sent", {
-      actor: userId,
+      actor: viewer.userId,
       detail: { from: parsed.data.from, to: parsed.data.to, threadId: input.threadId ?? null },
     });
 
@@ -78,19 +78,19 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
 }
 
 export async function archiveThread(threadId: string, archived: boolean) {
-  await requireUser();
+  await requireViewer();
   await setArchived(threadId, archived);
   revalidatePath("/", "layout");
 }
 
 export async function trashThread(threadId: string) {
-  await requireUser();
+  await requireViewer();
   await setTrashed(threadId, true);
   revalidatePath("/", "layout");
 }
 
 export async function restoreThread(threadId: string) {
-  await requireUser();
+  await requireViewer();
   const restored = await setTrashed(threadId, false);
   revalidatePath("/", "layout");
   // Same reason as deleteThread: a push from the client after the refresh
@@ -99,7 +99,7 @@ export async function restoreThread(threadId: string) {
 }
 
 export async function deleteThread(threadId: string) {
-  await requireUser();
+  await requireViewer();
   await deleteForever(threadId);
   revalidatePath("/", "layout");
   // Leaving from here rather than the client, because the refresh above would
@@ -108,20 +108,20 @@ export async function deleteThread(threadId: string) {
 }
 
 export async function storeDraft(input: DraftInput) {
-  const userId = await requireUser();
+  const viewer = await requireViewer();
 
   // The composer autosaves on every pause in typing, so an unbounded body
   // grows the table for as long as someone keeps writing.
   const parsed = draft.safeParse(input);
   if (!parsed.success) return null;
 
-  const id = await saveDraft(userId, parsed.data);
+  const id = await saveDraft(viewer.userId, parsed.data);
   revalidatePath("/", "layout");
   return id;
 }
 
 export async function discardDraft(id: string) {
-  await requireUser();
+  await requireViewer();
 
   await deleteDraft(id);
   revalidatePath("/", "layout");
@@ -136,7 +136,7 @@ export interface SearchHit {
 }
 
 export async function searchMail(query: string, scope: SearchScope): Promise<SearchHit[]> {
-  await requireUser();
+  await requireViewer();
   if (!query.trim()) return [];
 
   const rows = await searchThreads(query.trim(), scope);
@@ -154,7 +154,7 @@ export async function searchMail(query: string, scope: SearchScope): Promise<Sea
 // Marking read has to happen in an action rather than during the thread
 // render, so the list and rail can be revalidated with the new counts.
 export async function markRead(threadId: string) {
-  await requireUser();
+  await requireViewer();
 
   await markThreadRead(threadId);
   revalidatePath("/", "layout");
@@ -163,7 +163,7 @@ export async function markRead(threadId: string) {
 // A message is first shown without remote images, since loading one tells the
 // sender the address is read. This loads them on request.
 export async function showImages(messageId: string) {
-  await requireUser();
+  await requireViewer();
 
   const loaded = await loadMessageHtml(messageId);
   return loaded ? renderHtml(loaded.html, loaded.parts, { remote: true }) : null;
@@ -172,7 +172,7 @@ export async function showImages(messageId: string) {
 // Takes the message rather than an address, so the allowance can only ever
 // name someone who actually wrote in.
 export async function alwaysShowImages(messageId: string) {
-  await requireUser();
+  await requireViewer();
 
   const from = await loadSender(messageId);
   if (from) await allowSender(from);
@@ -180,14 +180,14 @@ export async function alwaysShowImages(messageId: string) {
 }
 
 export async function stopShowingImages(sender: string) {
-  await requireUser();
+  await requireViewer();
 
   await disallowSender(sender);
   revalidatePath("/", "layout");
 }
 
 export async function retryFailedMail() {
-  await requireUser();
+  await requireViewer();
 
   const result = await retryFailed();
   revalidatePath("/", "layout");

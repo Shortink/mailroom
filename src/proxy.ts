@@ -3,7 +3,7 @@ import { SESSION_COOKIE, readSession } from "@/lib/auth/session";
 
 // This is an optimistic check only. Next runs proxy on prefetches too, so it
 // reads the cookie and nothing else; real authorization lives in the data
-// layer via requireUser.
+// layer via requireViewer.
 //
 // Each of these routes authenticates itself: the webhook by Svix signature,
 // the inbound route by bearer token, attachments by session or signed link,

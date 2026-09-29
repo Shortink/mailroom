@@ -7,7 +7,7 @@ import { SearchProvider } from "@/components/mail/SearchField";
 import { ShellFrame } from "@/components/mail/ShellFrame";
 import { Zone } from "@/components/mail/Zone";
 import { railCollapsed } from "@/lib/chrome";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { findUser } from "@/lib/auth/users";
 import { formatClock } from "@/lib/format";
 import { countFailed, listInboxes } from "@/lib/mail/queries";
@@ -20,8 +20,8 @@ export default async function MailLayout({
   children: React.ReactNode;
   list: React.ReactNode;
 }) {
-  const userId = await requireUser();
-  const [rail, user, failed] = await Promise.all([listInboxes(), findUser(userId), countFailed()]);
+  const viewer = await requireViewer();
+  const [rail, user, failed] = await Promise.all([listInboxes(), findUser(viewer.userId), countFailed()]);
   const [zone, collapsed] = await Promise.all([readerZone(), railCollapsed()]);
 
   const accounts = rail.named.map((inbox) => inbox.address);

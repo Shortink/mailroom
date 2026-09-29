@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { formatWhen, snippet } from "@/lib/format";
 import { addressColor, initials, localPart } from "@/lib/mail/identity";
 import { listThreads, type Box } from "@/lib/mail/queries";
@@ -24,7 +24,7 @@ interface Props {
 export async function ThreadList({ box = "inbox", address, unreadOnly, before }: Props) {
   // The list is a parallel route slot. A layout does not decide whether a slot
   // renders, so the check cannot be left to the one above it.
-  await requireUser();
+  await requireViewer();
 
   const { threads, nextCursor } = await listThreads({ box, address, unreadOnly, before });
   const zone = await readerZone();

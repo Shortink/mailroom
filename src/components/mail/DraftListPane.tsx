@@ -1,12 +1,12 @@
 import { DraftList, type DraftItem } from "@/components/mail/DraftList";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { formatWhen, snippet } from "@/lib/format";
 import { listDrafts } from "@/lib/mail/drafts";
 import { readerZone } from "@/lib/zone";
 
 export async function DraftListPane() {
   // Rendered from a parallel route slot, which the layout above does not gate.
-  await requireUser();
+  await requireViewer();
 
   const drafts = await listDrafts();
   const zone = await readerZone();

@@ -29,3 +29,9 @@ export function initials(name: string | null, address: string | null) {
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
   return source.slice(0, 2).toUpperCase();
 }
+
+// Addresses are compared exactly as stored, so each one is lowercased on the
+// way in. Otherwise Alex@ becomes a second address nobody can see.
+export function normalizeAddress(address: string) {
+  return address.trim().toLowerCase();
+}

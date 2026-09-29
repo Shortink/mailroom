@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { record } from "@/lib/auth/audit";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
@@ -15,7 +15,7 @@ import { addressOrder, addressSettings } from "@/lib/mail/limits";
 import { registerAccount } from "@/lib/mail/queries";
 
 export async function addAccount(address: string) {
-  await requireUser();
+  await requireViewer();
 
   const parsed = z.email().safeParse(address.trim().toLowerCase());
   if (!parsed.success) return { error: "Enter a valid email address." };
@@ -28,27 +28,27 @@ export async function addAccount(address: string) {
 }
 
 export async function issueInvite() {
-  const userId = await requireUser();
-  const token = await createInvite(userId);
-  await record("invite.created", { actor: userId });
+  const viewer = await requireViewer();
+  const token = await createInvite(viewer.userId);
+  await record("invite.created", { actor: viewer.userId });
 
   revalidatePath("/settings");
   return { token };
 }
 
 export async function signOut() {
-  const userId = await requireUser();
+  const viewer = await requireViewer();
 
   // Bumping the version ends every other session too, not just this cookie.
-  await revokeSessions(userId);
-  await record("session.revoked", { actor: userId });
+  await revokeSessions(viewer.userId);
+  await record("session.revoked", { actor: viewer.userId });
 
   (await cookies()).delete(SESSION_COOKIE);
   redirect("/login");
 }
 
 export async function saveAddress(address: string, patch: AddressPatch) {
-  await requireUser();
+  await requireViewer();
 
   const parsed = addressSettings.safeParse(patch);
   if (!parsed.success) return { error: "Those settings aren't valid." };
@@ -59,7 +59,7 @@ export async function saveAddress(address: string, patch: AddressPatch) {
 }
 
 export async function saveOrder(order: string[]) {
-  await requireUser();
+  await requireViewer();
 
   const parsed = addressOrder.safeParse(order);
   if (!parsed.success) return;
@@ -69,8 +69,8 @@ export async function saveOrder(order: string[]) {
 }
 
 export async function saveLoadImages(on: boolean) {
-  const userId = await requireUser();
+  const viewer = await requireViewer();
 
-  await setLoadsImages(userId, on);
+  await setLoadsImages(viewer.userId, on);
   revalidatePath("/", "layout");
 }

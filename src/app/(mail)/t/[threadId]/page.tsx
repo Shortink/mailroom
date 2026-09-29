@@ -6,7 +6,7 @@ import {
   type ThreadMessage,
 } from "@/components/mail/MessageThread";
 import { QuickReply, ThreadActions } from "@/components/mail/ThreadActions";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { formatAgo, formatExact, formatSize, snippet } from "@/lib/format";
 import { authentication } from "@/lib/mail/auth";
 import { shownHeaders } from "@/lib/mail/headers";
@@ -27,7 +27,7 @@ function extension(filename: string) {
 }
 
 export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
-  const userId = await requireUser();
+  const viewer = await requireViewer();
   const { threadId } = await params;
 
   const thread = await loadThread(threadId);
@@ -46,7 +46,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   const verdicts = thread.messages.map((message) => authentication(message));
   const rules = await imageRules(
     thread.messages.map((message, index) => ({ ...message, verdict: verdicts[index].verdict })),
-    await loadsImages(userId),
+    await loadsImages(viewer.userId),
   );
 
   const messages: ThreadMessage[] = thread.messages.map((message, index) => {

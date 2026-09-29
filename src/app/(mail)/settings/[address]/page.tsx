@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AddressSettings } from "@/components/mail/AddressSettings";
-import { requireUser } from "@/lib/auth/require";
+import { requireViewer } from "@/lib/auth/require";
 import { formatDay, formatStamp, formatWhen } from "@/lib/format";
 import { loadAddress } from "@/lib/mail/addresses";
 import { readerZone } from "@/lib/zone";
@@ -10,7 +10,7 @@ export default async function AddressSettingsPage({
 }: {
   params: Promise<{ address: string }>;
 }) {
-  await requireUser();
+  await requireViewer();
   const { address } = await params;
 
   const detail = await loadAddress(decodeURIComponent(address));

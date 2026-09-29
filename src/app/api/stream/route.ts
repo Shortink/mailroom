@@ -1,4 +1,4 @@
-import { currentUser } from "@/lib/auth/require";
+import { currentViewer } from "@/lib/auth/require";
 import { onMailArrived } from "@/lib/mail/events";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ const HEARTBEAT_MS = 25_000;
 // stream. A non-200 here stops the browser retrying, which is what should
 // happen once a session is no longer valid.
 export async function GET(request: Request) {
-  if (!(await currentUser())) return new Response("unauthorized", { status: 401 });
+  if (!(await currentViewer())) return new Response("unauthorized", { status: 401 });
 
   const encoder = new TextEncoder();
 

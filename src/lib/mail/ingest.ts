@@ -4,6 +4,7 @@ import { addresses, attachments, messages, threads } from "../db/schema";
 import { getStorage } from "../storage";
 import { mailArrived } from "./events";
 import { forwardCopy } from "./forward";
+import { normalizeAddress } from "./identity";
 import type { InboundAttachment, InboundMail } from "./inbound";
 import { downloadAttachment, getAttachment, getReceivedEmail } from "./resend";
 import { CLAIM_MS, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY, MAX_SUBJECT } from "./limits";
@@ -69,7 +70,7 @@ export async function completeIngest(messageId: string) {
 // Mail that arrived whole. Nothing is fetched afterwards, so it finishes inside
 // the request rather than through the pending state the sweep watches.
 export async function ingestParsed(mail: InboundMail) {
-  const deliveredTo = mail.receivedFor?.trim().toLowerCase();
+  const deliveredTo = mail.receivedFor && normalizeAddress(mail.receivedFor);
   if (!deliveredTo) throw new Error("No envelope recipient.");
 
   if (mail.messageId) {

@@ -5,9 +5,9 @@ import { attachments, messages } from "../../src/lib/db/schema";
 import { newThread } from "../helpers";
 import { signAttachmentUrl } from "../../src/lib/mail/attachmentLink";
 
-const currentUser = vi.fn();
+const currentViewer = vi.fn();
 vi.mock("../../src/lib/auth/require", () => ({
-  currentUser: () => currentUser(),
+  currentViewer: () => currentViewer(),
 }));
 
 const get = vi.fn();
@@ -25,8 +25,8 @@ function fetchKey(query = "") {
 }
 
 beforeEach(async () => {
-  currentUser.mockReset();
-  currentUser.mockResolvedValue(null);
+  currentViewer.mockReset();
+  currentViewer.mockResolvedValue(null);
   get.mockReset();
   get.mockResolvedValue(Buffer.from("%PDF-"));
 
@@ -52,7 +52,7 @@ describe("attachment route", () => {
   });
 
   it("serves to a session", async () => {
-    currentUser.mockResolvedValue("user-1");
+    currentViewer.mockResolvedValue("user-1");
     const response = await fetchKey();
 
     expect(response.status).toBe(200);
