@@ -21,7 +21,11 @@ export default async function MailLayout({
   list: React.ReactNode;
 }) {
   const viewer = await requireViewer();
-  const [rail, user, failed] = await Promise.all([listInboxes(), findUser(viewer.userId), countFailed()]);
+  const [rail, user, failed] = await Promise.all([
+    listInboxes(viewer),
+    findUser(viewer.userId),
+    countFailed(viewer.view),
+  ]);
   const [zone, collapsed] = await Promise.all([readerZone(), railCollapsed()]);
 
   const accounts = rail.named.map((inbox) => inbox.address);

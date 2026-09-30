@@ -18,6 +18,7 @@ vi.mock("../../src/lib/storage", () => ({
 const { GET } = await import("../../src/app/api/attachments/[key]/route");
 
 const KEY = "msg/part-0";
+const owner = { userId: "user-1", role: "owner", allowed: "all", view: { kind: "unassigned" }, choice: null };
 
 function fetchKey(query = "") {
   const request = new Request(`https://example.test/api/attachments/${encodeURIComponent(KEY)}${query}`);
@@ -52,7 +53,7 @@ describe("attachment route", () => {
   });
 
   it("serves to a session", async () => {
-    currentViewer.mockResolvedValue("user-1");
+    currentViewer.mockResolvedValue(owner);
     const response = await fetchKey();
 
     expect(response.status).toBe(200);

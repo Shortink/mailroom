@@ -12,6 +12,10 @@ import {
 } from "../../src/lib/mail/queries";
 import { newThread } from "../helpers";
 
+// No members exist here, so the owner's view is every address.
+const everything = { kind: "unassigned" } as const;
+const owner = { userId: "00000000-0000-0000-0000-000000000000", role: "owner", view: everything } as const;
+
 async function seedThread(opts: {
   subject: string;
   at: string;
@@ -48,7 +52,7 @@ describe("listThreads", () => {
     await seedThread({ subject: "older", at: "2026-01-01", deliveredTo: "hi@x.test" });
     await seedThread({ subject: "newer", at: "2026-09-01", deliveredTo: "hi@x.test" });
 
-    const { threads: rows } = await listThreads({});
+    const { threads: rows } = await listThreads(everything, {});
     expect(rows.map((r) => r.subject)).toEqual(["newer", "older"]);
   });
 
@@ -56,7 +60,7 @@ describe("listThreads", () => {
     await seedThread({ subject: "to hi", at: "2026-09-01", deliveredTo: "hi@x.test" });
     await seedThread({ subject: "to billing", at: "2026-09-02", deliveredTo: "billing@x.test" });
 
-    const { threads: rows } = await listThreads({ address: "billing@x.test" });
+    const { threads: rows } = await listThreads({ kind: "addresses", list: ["billing@x.test"] }, {});
     expect(rows.map((r) => r.subject)).toEqual(["to billing"]);
   });
 
@@ -66,14 +70,14 @@ describe("listThreads", () => {
       threadId, direction: "outbound", status: "complete", subject: "busy", deliveredTo: "hi@x.test",
     });
 
-    expect((await listThreads({})).threads).toHaveLength(1);
+    expect((await listThreads(everything, {})).threads).toHaveLength(1);
   });
 
   it("finds threads by full-text search across every address", async () => {
     await seedThread({ subject: "Quarterly invoice", at: "2026-09-01", deliveredTo: "hi@x.test", body: "amount due enclosed" });
     await seedThread({ subject: "Lunch", at: "2026-09-02", deliveredTo: "hi@x.test", body: "thursday?" });
 
-    const rows = await searchThreads("invoice enclosed", {
+    const rows = await searchThreads(everything, "invoice enclosed", {
       unread: false,
       recent: false,
       attachments: false,
@@ -83,7 +87,7 @@ describe("listThreads", () => {
 
   it("reports unread counts per thread", async () => {
     await seedThread({ subject: "unread one", at: "2026-09-01", deliveredTo: "hi@x.test", unread: true });
-    const [row] = (await listThreads({})).threads;
+    const [row] = (await listThreads(everything, {})).threads;
     expect(row.unread).toBe(1);
   });
 });
@@ -94,7 +98,7 @@ describe("listInboxes", () => {
     await seedThread({ subject: "b", at: "2026-09-02", deliveredTo: "spam@x.test" });
     await db.update(addresses).set({ pinned: true }).where(eq(addresses.address, "hi@x.test"));
 
-    const { named, catchAll } = await listInboxes();
+    const { named, catchAll } = await listInboxes(owner);
     expect(named.map((inbox) => inbox.address)).toEqual(["hi@x.test"]);
     expect(named[0].unread).toBe(1);
     expect(catchAll.map((inbox) => inbox.address)).toEqual(["spam@x.test"]);
@@ -104,7 +108,7 @@ describe("listInboxes", () => {
     await seedThread({ subject: "a", at: "2026-09-01", deliveredTo: "junk@x.test" });
     await db.update(addresses).set({ hidden: true }).where(eq(addresses.address, "junk@x.test"));
 
-    const { named, catchAll } = await listInboxes();
+    const { named, catchAll } = await listInboxes(owner);
     expect(named).toHaveLength(0);
     expect(catchAll).toHaveLength(0);
   });
@@ -114,7 +118,7 @@ describe("registerAccount", () => {
   it("pins an address that never received mail", async () => {
     await registerAccount("me@x.test");
 
-    const { named } = await listInboxes();
+    const { named } = await listInboxes(owner);
     expect(named.map((inbox) => inbox.address)).toEqual(["me@x.test"]);
   });
 
@@ -123,7 +127,7 @@ describe("registerAccount", () => {
 
     await registerAccount("hi@x.test");
 
-    const { named } = await listInboxes();
+    const { named } = await listInboxes(owner);
     expect(named.map((inbox) => inbox.address)).toEqual(["hi@x.test"]);
     expect(named[0].unread).toBe(1);
   });
@@ -137,12 +141,12 @@ describe("loadThread", () => {
       textBody: "second", receivedAt: new Date("2026-09-02"),
     });
 
-    const thread = await loadThread(threadId);
+    const thread = await loadThread("all", threadId);
     expect(thread?.messages.map((m) => m.textBody)).toEqual(["body", "second"]);
   });
 
   it("returns null for an unknown thread", async () => {
-    expect(await loadThread("00000000-0000-0000-0000-000000000000")).toBeNull();
+    expect(await loadThread("all", "00000000-0000-0000-0000-000000000000")).toBeNull();
   });
 
   it("hides messages that never completed", async () => {
@@ -151,7 +155,7 @@ describe("loadThread", () => {
       threadId, direction: "inbound", status: "pending", resendId: "still-fetching",
     });
 
-    const thread = await loadThread(threadId);
+    const thread = await loadThread("all", threadId);
     expect(thread?.messages).toHaveLength(1);
   });
 });
@@ -186,14 +190,14 @@ describe("listThreads paging", () => {
       await seedThread({ subject: `t${i}`, at: `2026-09-0${i + 1}`, deliveredTo: "hi@x.test" });
     }
 
-    const first = await listThreads({ limit: 2 });
+    const first = await listThreads(everything, { limit: 2 });
     expect(first.threads.map((t) => t.subject)).toEqual(["t4", "t3"]);
     expect(first.nextCursor).not.toBeNull();
 
-    const second = await listThreads({ limit: 2, before: first.nextCursor! });
+    const second = await listThreads(everything, { limit: 2, before: first.nextCursor! });
     expect(second.threads.map((t) => t.subject)).toEqual(["t2", "t1"]);
 
-    const last = await listThreads({ limit: 2, before: second.nextCursor! });
+    const last = await listThreads(everything, { limit: 2, before: second.nextCursor! });
     expect(last.threads.map((t) => t.subject)).toEqual(["t0"]);
     expect(last.nextCursor).toBeNull();
   });
@@ -203,7 +207,7 @@ describe("listThreads paging", () => {
     await seedThread({ subject: "new", at: "2026-09-02", deliveredTo: "hi@x.test", unread: true });
 
     // A page of one would come back empty if unread were filtered after paging.
-    const page = await listThreads({ unreadOnly: true, limit: 1 });
+    const page = await listThreads(everything, { unreadOnly: true, limit: 1 });
     expect(page.threads.map((t) => t.subject)).toEqual(["new"]);
   });
 });

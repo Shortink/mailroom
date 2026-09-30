@@ -6,10 +6,10 @@ import { loadDraft } from "@/lib/mail/drafts";
 import { readerZone } from "@/lib/zone";
 
 export default async function DraftPage({ params }: { params: Promise<{ draftId: string }> }) {
-  await requireViewer();
+  const viewer = await requireViewer();
   const { draftId } = await params;
 
-  const draft = await loadDraft(draftId);
+  const draft = await loadDraft(viewer, draftId);
   if (!draft) notFound();
 
   return (

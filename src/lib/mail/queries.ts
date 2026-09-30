@@ -1,7 +1,9 @@
 import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, attachments, messages, threads } from "../db/schema";
+import type { Viewer } from "../auth/viewer";
 import { countDrafts } from "./drafts";
+import { inReach, type Allowed, type Reach } from "./reach";
 
 export interface ThreadSummary {
   id: string;
@@ -12,8 +14,7 @@ export interface ThreadSummary {
   from: string | null;
   fromName: string | null;
   snippet: string | null;
-  deliveredTo: string | null;
-  sentFrom: string | null;
+  address: string;
   hasAttachment: boolean;
 }
 
@@ -25,7 +26,6 @@ const visible = or(eq(messages.status, "complete"), eq(messages.direction, "outb
 export type Box = "inbox" | "sent" | "archive" | "trash";
 
 export interface ListOptions {
-  address?: string;
   box?: Box;
   unreadOnly?: boolean;
   limit?: number;
@@ -40,24 +40,21 @@ export interface ThreadPage {
 
 const PAGE_SIZE = 50;
 
-// In Sent the address identifying a thread is the one it was sent from, not
-// the one it was delivered to.
-function addressMatch(box: Box, address: string) {
-  return box === "sent" ? eq(messages.fromAddress, address) : eq(messages.deliveredTo, address);
-}
+// Counted the same way wherever an unread number is shown.
+const unreadCount = sql<number>`count(${messages.id}) filter (where ${messages.readAt} is null and ${messages.status} = 'complete' and ${threads.trashedAt} is null)::int`;
 
 // Which threads belong in this view, newest first, one page at a time. Kept
 // separate from the hydration below so that only the page being shown pays for
 // the joins and aggregates.
-async function pageOfThreads(opts: ListOptions, box: Box, limit: number) {
+async function pageOfThreads(reach: Reach, opts: ListOptions, box: Box, limit: number) {
   // Trash takes threads from every box, so the archived flag doesn't matter there.
   const where =
     box === "trash"
       ? [visible, isNotNull(threads.trashedAt)]
       : [visible, isNull(threads.trashedAt), eq(threads.archived, box === "archive")];
 
+  where.push(inReach(threads.address, reach));
   if (box === "sent") where.push(eq(messages.direction, "outbound"));
-  if (opts.address) where.push(addressMatch(box, opts.address));
   if (opts.before) where.push(lt(threads.lastMessageAt, opts.before));
   if (opts.unreadOnly) {
     where.push(
@@ -79,12 +76,12 @@ async function pageOfThreads(opts: ListOptions, box: Box, limit: number) {
     .limit(limit + 1);
 }
 
-export async function listThreads(opts: ListOptions): Promise<ThreadPage> {
+export async function listThreads(reach: Reach, opts: ListOptions): Promise<ThreadPage> {
   const box = opts.box ?? "inbox";
   const limit = opts.limit ?? PAGE_SIZE;
 
   // One row over the limit shows whether another page exists.
-  const page = await pageOfThreads(opts, box, limit);
+  const page = await pageOfThreads(reach, opts, box, limit);
   const wanted = page.slice(0, limit);
   if (wanted.length === 0) return { threads: [], nextCursor: null };
 
@@ -98,8 +95,7 @@ export async function listThreads(opts: ListOptions): Promise<ThreadPage> {
       from: sql<string | null>`(array_agg(${messages.fromAddress} order by ${messages.receivedAt} desc))[1]`,
       fromName: sql<string | null>`(array_agg(${messages.fromName} order by ${messages.receivedAt} desc))[1]`,
       snippet: sql<string | null>`(array_agg(${messages.textBody} order by ${messages.receivedAt} desc))[1]`,
-      deliveredTo: sql<string | null>`(array_agg(${messages.deliveredTo} order by ${messages.receivedAt} desc))[1]`,
-      sentFrom: sql<string | null>`(array_agg(${messages.fromAddress}) filter (where ${messages.direction} = 'outbound'))[1]`,
+      address: threads.address,
       hasAttachment: sql<boolean>`bool_or(${attachments.id} is not null)`,
     })
     .from(threads)
@@ -149,20 +145,24 @@ export interface Rail {
   trashed: number;
 }
 
-export async function listInboxes(): Promise<Rail> {
+export async function listInboxes(viewer: Pick<Viewer, "userId" | "role" | "view">): Promise<Rail> {
+  const owner = viewer.role === "owner";
+
+  // Pinned and hidden arrange the owner's sidebar. They never take an address
+  // away from the member who holds it.
   const rows = await db
     .select({
       address: addresses.address,
       label: addresses.label,
       hue: addresses.hue,
       pinned: addresses.pinned,
-      unread: sql<number>`count(${messages.id}) filter (where ${messages.readAt} is null and ${messages.status} = 'complete' and ${threads.trashedAt} is null)::int`,
+      unread: unreadCount,
     })
     .from(addresses)
-    .leftJoin(messages, eq(messages.deliveredTo, addresses.address))
-    .leftJoin(threads, eq(threads.id, messages.threadId))
-    .where(eq(addresses.hidden, false))
-    .groupBy(addresses.address, addresses.label, addresses.hue, addresses.pinned)
+    .leftJoin(threads, eq(threads.address, addresses.address))
+    .leftJoin(messages, eq(messages.threadId, threads.id))
+    .where(and(inReach(addresses.address, viewer.view), owner ? eq(addresses.hidden, false) : undefined))
+    .groupBy(addresses.address)
     .orderBy(sql`${addresses.position} asc nulls last`, asc(addresses.address));
 
   const strip = ({ address, label, hue, unread }: (typeof rows)[number]) => ({
@@ -179,25 +179,25 @@ export async function listInboxes(): Promise<Rail> {
     })
     .from(messages)
     .innerJoin(threads, eq(threads.id, messages.threadId))
-    .where(and(visible, isNull(threads.trashedAt)));
+    .where(and(visible, isNull(threads.trashedAt), inReach(threads.address, viewer.view)));
 
   const [archived] = await db
     .select({ n: count() })
     .from(threads)
-    .where(and(eq(threads.archived, true), isNull(threads.trashedAt)));
+    .where(and(eq(threads.archived, true), isNull(threads.trashedAt), inReach(threads.address, viewer.view)));
 
   const [trashed] = await db
     .select({ n: count() })
     .from(threads)
-    .where(isNotNull(threads.trashedAt));
+    .where(and(isNotNull(threads.trashedAt), inReach(threads.address, viewer.view)));
 
-  const draftCount = await countDrafts();
+  const draftCount = await countDrafts(viewer);
 
   return {
     // Addresses the operator claimed; the rest arrived by catch-all and are
     // listed separately until they are named.
-    named: rows.filter((row) => row.pinned).map(strip),
-    catchAll: rows.filter((row) => !row.pinned).map(strip),
+    named: owner ? rows.filter((row) => row.pinned).map(strip) : rows.map(strip),
+    catchAll: owner ? rows.filter((row) => !row.pinned).map(strip) : [],
     unread: totals?.unread ?? 0,
     sent: totals?.sent ?? 0,
     drafts: draftCount,
@@ -206,8 +206,11 @@ export async function listInboxes(): Promise<Rail> {
   };
 }
 
-export async function loadThread(threadId: string) {
-  const [thread] = await db.select().from(threads).where(eq(threads.id, threadId));
+export async function loadThread(allowed: Allowed, threadId: string) {
+  const [thread] = await db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.id, threadId), inReach(threads.address, allowed)));
   if (!thread) return null;
 
   const rows = await db
@@ -231,11 +234,12 @@ export async function loadThread(threadId: string) {
 
 // One message's body and its attachments, for rendering it again with remote
 // images.
-export async function loadMessageHtml(messageId: string) {
+export async function loadMessageHtml(allowed: Allowed, messageId: string) {
   const [message] = await db
     .select({ htmlBody: messages.htmlBody })
     .from(messages)
-    .where(and(eq(messages.id, messageId), visible));
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(and(eq(messages.id, messageId), visible, inReach(threads.address, allowed)));
   if (!message?.htmlBody) return null;
 
   const parts = await db
@@ -246,11 +250,14 @@ export async function loadMessageHtml(messageId: string) {
   return { html: message.htmlBody, parts };
 }
 
-export async function loadSender(messageId: string) {
+export async function loadSender(allowed: Allowed, messageId: string) {
   const [row] = await db
     .select({ from: messages.fromAddress })
     .from(messages)
-    .where(and(eq(messages.id, messageId), eq(messages.direction, "inbound")));
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(
+      and(eq(messages.id, messageId), eq(messages.direction, "inbound"), inReach(threads.address, allowed)),
+    );
   return row?.from ?? null;
 }
 
@@ -265,11 +272,12 @@ export async function setArchived(threadId: string, archived: boolean) {
   await db.update(threads).set({ archived }).where(eq(threads.id, threadId));
 }
 
-export async function countFailed() {
+export async function countFailed(view: Reach) {
   const [row] = await db
     .select({ n: count() })
     .from(messages)
-    .where(eq(messages.status, "failed"));
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(and(eq(messages.status, "failed"), inReach(threads.address, view)));
   return row?.n ?? 0;
 }
 
@@ -283,15 +291,15 @@ export interface SearchRow {
   id: string;
   sender: string;
   subject: string;
-  address: string | null;
+  address: string;
   at: Date;
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Search spans every address on the domain, catch-all included, and returns
-// one row per thread rather than per matching message.
-export async function searchThreads(query: string, scope: SearchScope): Promise<SearchRow[]> {
+// Search spans every address in the view, catch-all included, and returns one
+// row per thread rather than per matching message.
+export async function searchThreads(view: Reach, query: string, scope: SearchScope): Promise<SearchRow[]> {
   const where = [visible, sql`${messages.search} @@ plainto_tsquery('english', ${query})`];
 
   if (scope.unread) where.push(and(isNull(messages.readAt), eq(messages.direction, "inbound"))!);
@@ -312,14 +320,14 @@ export async function searchThreads(query: string, scope: SearchScope): Promise<
       subject: threads.subject,
       at: threads.lastMessageAt,
       sender: sql<string>`coalesce((array_agg(${messages.fromName} order by ${messages.receivedAt} desc))[1], (array_agg(${messages.fromAddress} order by ${messages.receivedAt} desc))[1], 'Unknown')`,
-      address: sql<string | null>`(array_agg(${messages.deliveredTo} order by ${messages.receivedAt} desc))[1]`,
+      address: threads.address,
       hasAttachment: sql<boolean>`bool_or(${attachments.id} is not null)`,
     })
     .from(threads)
     .innerJoin(matched, eq(matched.threadId, threads.id))
     .innerJoin(messages, eq(messages.threadId, threads.id))
     .leftJoin(attachments, eq(attachments.messageId, messages.id))
-    .where(isNull(threads.trashedAt))
+    .where(and(isNull(threads.trashedAt), inReach(threads.address, view)))
     .groupBy(threads.id)
     .orderBy(desc(threads.lastMessageAt))
     .limit(50);

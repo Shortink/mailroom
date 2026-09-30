@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { attachments } from "@/lib/db/schema";
+import { attachments, messages, threads } from "@/lib/db/schema";
 import { currentViewer } from "@/lib/auth/require";
 import { attachmentUrlIsValid } from "@/lib/mail/attachmentLink";
+import { inReach } from "@/lib/mail/reach";
 import { getStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -23,15 +24,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ key:
   const storageKey = decodeURIComponent(key);
 
   // A session, or a link the thread page signed for the frame that has none.
+  // That page already passed the check below, so a signed link skips it.
   const { searchParams } = new URL(request.url);
   const signed = attachmentUrlIsValid(storageKey, searchParams.get("exp"), searchParams.get("sig"));
-  if (!signed && !(await currentViewer())) return new Response("unauthorized", { status: 401 });
+  const viewer = signed ? null : await currentViewer();
+  if (!signed && !viewer) return new Response("unauthorized", { status: 401 });
 
-  const [row] = await db
-    .select()
+  const [found] = await db
+    .select({ attachment: attachments })
     .from(attachments)
-    .where(eq(attachments.storageKey, storageKey));
-  if (!row) return new Response("not found", { status: 404 });
+    .innerJoin(messages, eq(messages.id, attachments.messageId))
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(
+      and(
+        eq(attachments.storageKey, storageKey),
+        viewer ? inReach(threads.address, viewer.allowed) : undefined,
+      ),
+    );
+  if (!found) return new Response("not found", { status: 404 });
+  const row = found.attachment;
 
   const body = await getStorage().get(storageKey);
   if (!body) return new Response("not found", { status: 404 });

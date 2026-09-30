@@ -69,7 +69,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
             ref={input}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search every address"
+            placeholder="Search this view"
             className="w-full bg-transparent text-[15px] outline-none placeholder:text-ink3"
           />
           <button
@@ -112,7 +112,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
             >
               <span
                 className="size-[7px] flex-none rounded-full"
-                style={{ background: addressColor(hit.address ?? "") }}
+                style={{ background: addressColor(hit.address) }}
               />
               <span className="w-[150px] flex-none truncate text-[13px] font-semibold">
                 {hit.sender}
@@ -136,8 +136,8 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
 
         {searched && (
           <footer className="flex-none border-t border-line px-5 py-2.5 font-mono text-[10.5px] text-ink3">
-            {hits.length} {hits.length === 1 ? "result" : "results"} · searching every address,
-            including catch-all
+            {hits.length} {hits.length === 1 ? "result" : "results"} · searching every address in
+            this view
           </footer>
         )}
       </div>

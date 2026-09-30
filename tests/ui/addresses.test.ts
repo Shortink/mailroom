@@ -13,6 +13,13 @@ import {
 import { listInboxes } from "../../src/lib/mail/queries";
 import { newThread } from "../helpers";
 
+// No members exist here, so the owner's view is every address.
+const owner = {
+  userId: "00000000-0000-0000-0000-000000000000",
+  role: "owner",
+  view: { kind: "unassigned" },
+} as const;
+
 async function seedThread(opts: { subject: string; at: string; deliveredTo: string }) {
   const thread = await newThread(opts.deliveredTo, {
     subject: opts.subject,
@@ -42,7 +49,7 @@ describe("loadAddress", () => {
     await seedThread({ subject: "one", at: "2026-09-01", deliveredTo: "hi@x.test" });
     await seedThread({ subject: "two", at: "2026-09-03", deliveredTo: "hi@x.test" });
 
-    const detail = await loadAddress("hi@x.test");
+    const detail = await loadAddress("all", "hi@x.test");
 
     expect(detail?.received).toBe(2);
     expect(detail?.unread).toBe(2);
@@ -51,7 +58,7 @@ describe("loadAddress", () => {
   });
 
   it("returns null for an address that was never seen", async () => {
-    expect(await loadAddress("nobody@x.test")).toBeNull();
+    expect(await loadAddress("all", "nobody@x.test")).toBeNull();
   });
 });
 
@@ -59,7 +66,7 @@ describe("updateAddress", () => {
   it("stores settings for an address with no mail yet", async () => {
     await updateAddress("new@x.test", { label: "New", hue: 42, autoArchive: true });
 
-    const detail = await loadAddress("new@x.test");
+    const detail = await loadAddress("all", "new@x.test");
     expect(detail?.label).toBe("New");
     expect(detail?.hue).toBe(42);
     expect(detail?.autoArchive).toBe(true);
@@ -69,7 +76,7 @@ describe("updateAddress", () => {
     await updateAddress("hi@x.test", { label: "Personal", hue: 88 });
     await updateAddress("hi@x.test", { autoArchive: true });
 
-    const detail = await loadAddress("hi@x.test");
+    const detail = await loadAddress("all", "hi@x.test");
     expect(detail?.label).toBe("Personal");
     expect(detail?.hue).toBe(88);
     expect(detail?.autoArchive).toBe(true);
@@ -138,7 +145,7 @@ describe("sidebar order", () => {
     await pinned("a@x.test", "b@x.test", "c@x.test", "d@x.test");
     await reorderAddresses(["c@x.test", "a@x.test"]);
 
-    const { named } = await listInboxes();
+    const { named } = await listInboxes(owner);
     expect(named.map((inbox) => inbox.address)).toEqual([
       "c@x.test",
       "a@x.test",
@@ -154,7 +161,7 @@ describe("sidebar order", () => {
     await updateAddress("b@x.test", { pinned: false });
     await updateAddress("b@x.test", { pinned: true });
 
-    const { named } = await listInboxes();
+    const { named } = await listInboxes(owner);
     expect(named.map((inbox) => inbox.address)).toEqual(["a@x.test", "b@x.test"]);
   });
 
@@ -162,9 +169,9 @@ describe("sidebar order", () => {
     await pinned("a@x.test", "b@x.test");
     await updateAddress("a@x.test", { hidden: true });
 
-    const { named } = await listInboxes();
+    const { named } = await listInboxes(owner);
     expect(named.map((inbox) => inbox.address)).toEqual(["b@x.test"]);
     expect(await listHidden()).toEqual(["a@x.test"]);
-    expect((await loadAddress("a@x.test"))?.hidden).toBe(true);
+    expect((await loadAddress("all", "a@x.test"))?.hidden).toBe(true);
   });
 });

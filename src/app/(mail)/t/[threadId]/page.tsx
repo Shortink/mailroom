@@ -30,7 +30,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   const viewer = await requireViewer();
   const { threadId } = await params;
 
-  const thread = await loadThread(threadId);
+  const thread = await loadThread(viewer.allowed, threadId);
   if (!thread) notFound();
 
   const unread = thread.messages.some(
@@ -90,10 +90,11 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
     };
   });
 
-  // Reply from the address the mail was delivered to, back to whoever last wrote.
+  // A reply always leaves from the address the thread belongs to, back to
+  // whoever last wrote.
   const inbound = thread.messages.filter((message) => message.direction === "inbound");
   const latest = inbound.at(-1) ?? thread.messages.at(-1);
-  const replyFrom = latest?.deliveredTo ?? "";
+  const replyFrom = thread.address;
   const replyTo = latest?.fromAddress ?? "";
 
   // Whoever wrote last owns the reply box, so a sender new to an established

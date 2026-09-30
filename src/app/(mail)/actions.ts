@@ -131,15 +131,15 @@ export interface SearchHit {
   id: string;
   sender: string;
   subject: string;
-  address: string | null;
+  address: string;
   time: string;
 }
 
 export async function searchMail(query: string, scope: SearchScope): Promise<SearchHit[]> {
-  await requireViewer();
+  const viewer = await requireViewer();
   if (!query.trim()) return [];
 
-  const rows = await searchThreads(query.trim(), scope);
+  const rows = await searchThreads(viewer.view, query.trim(), scope);
   const zone = await readerZone();
 
   return rows.map((row) => ({
@@ -163,18 +163,18 @@ export async function markRead(threadId: string) {
 // A message is first shown without remote images, since loading one tells the
 // sender the address is read. This loads them on request.
 export async function showImages(messageId: string) {
-  await requireViewer();
+  const viewer = await requireViewer();
 
-  const loaded = await loadMessageHtml(messageId);
+  const loaded = await loadMessageHtml(viewer.allowed, messageId);
   return loaded ? renderHtml(loaded.html, loaded.parts, { remote: true }) : null;
 }
 
 // Takes the message rather than an address, so the allowance can only ever
 // name someone who actually wrote in.
 export async function alwaysShowImages(messageId: string) {
-  await requireViewer();
+  const viewer = await requireViewer();
 
-  const from = await loadSender(messageId);
+  const from = await loadSender(viewer.allowed, messageId);
   if (from) await allowSender(from);
   revalidatePath("/", "layout");
 }

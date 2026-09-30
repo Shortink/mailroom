@@ -11,12 +11,14 @@ import {
 import { newThread, newUser } from "../helpers";
 
 let userId: string;
+let viewer: { userId: string; view: { kind: "unassigned" }; allowed: "all" };
 
 beforeEach(async () => {
   await db.execute(
     sql`truncate table messages, threads, drafts, addresses, users restart identity cascade`,
   );
   userId = (await newUser()).id;
+  viewer = { userId, view: { kind: "unassigned" }, allowed: "all" };
 });
 
 describe("saveDraft", () => {
@@ -28,9 +30,9 @@ describe("saveDraft", () => {
       body: "one",
     });
 
-    const draft = await loadDraft(id);
+    const draft = await loadDraft(viewer, id);
     expect(draft?.body).toBe("one");
-    expect(await countDrafts()).toBe(1);
+    expect(await countDrafts(viewer)).toBe(1);
   });
 
   it("updates in place rather than piling up rows", async () => {
@@ -44,9 +46,9 @@ describe("saveDraft", () => {
     });
 
     expect(second).toBe(first);
-    expect(await countDrafts()).toBe(1);
+    expect(await countDrafts(viewer)).toBe(1);
 
-    const draft = await loadDraft(first);
+    const draft = await loadDraft(viewer, first);
     expect(draft?.body).toBe("two");
     expect(draft?.to).toBe("them@y.test");
   });
@@ -64,7 +66,7 @@ describe("saveDraft", () => {
     });
 
     expect(replacement).not.toBe(id);
-    expect(await countDrafts()).toBe(1);
+    expect(await countDrafts(viewer)).toBe(1);
   });
 });
 
@@ -74,7 +76,7 @@ describe("listDrafts", () => {
     await db.execute(sql`update drafts set updated_at = now() - interval '1 hour' where id = ${older}`);
     await saveDraft(userId, { from: "me@x.test", to: "", subject: "newer", body: "b" });
 
-    const rows = await listDrafts();
+    const rows = await listDrafts(viewer);
     expect(rows.map((row) => row.subject)).toEqual(["newer", "older"]);
   });
 
@@ -88,7 +90,7 @@ describe("listDrafts", () => {
       body: "re",
     });
 
-    const [row] = await listDrafts();
+    const [row] = await listDrafts(viewer);
     expect(row.subject).toBe("Original subject");
     expect(row.threadId).toBe(thread.id);
   });
@@ -105,6 +107,6 @@ describe("listDrafts", () => {
 
     await db.execute(sql`delete from threads where id = ${thread.id}`);
 
-    expect(await countDrafts()).toBe(0);
+    expect(await countDrafts(viewer)).toBe(0);
   });
 });

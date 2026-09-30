@@ -12,6 +12,10 @@ vi.mock("../../src/lib/storage", () => ({
 const { listInboxes, listThreads, searchThreads } = await import("../../src/lib/mail/queries");
 const { deleteForever, emptyOldTrash, setTrashed } = await import("../../src/lib/mail/trash");
 
+// No members exist here, so the owner's view is every address.
+const everything = { kind: "unassigned" } as const;
+const owner = { userId: "00000000-0000-0000-0000-000000000000", role: "owner", view: everything } as const;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 async function seedThread(subject: string, opts: { archived?: boolean; trashedAt?: Date } = {}) {
@@ -49,10 +53,10 @@ describe("Trash", () => {
     await setTrashed(threadId, true);
     await setTrashed(archived.threadId, true);
 
-    expect((await listThreads({})).threads).toHaveLength(0);
-    expect((await listThreads({ box: "archive" })).threads).toHaveLength(0);
+    expect((await listThreads(everything, {})).threads).toHaveLength(0);
+    expect((await listThreads(everything, { box: "archive" })).threads).toHaveLength(0);
 
-    const trash = await listThreads({ box: "trash" });
+    const trash = await listThreads(everything, { box: "trash" });
     expect(trash.threads.map((row) => row.subject).sort()).toEqual(["archived", "kept"]);
   });
 
@@ -61,19 +65,19 @@ describe("Trash", () => {
     await setTrashed(threadId, true);
     await setTrashed(threadId, false);
 
-    expect((await listThreads({ box: "archive" })).threads).toHaveLength(1);
-    expect((await listThreads({ box: "trash" })).threads).toHaveLength(0);
+    expect((await listThreads(everything, { box: "archive" })).threads).toHaveLength(1);
+    expect((await listThreads(everything, { box: "trash" })).threads).toHaveLength(0);
   });
 
   it("leaves trashed mail out of the counts and search", async () => {
     await seedThread("invoice", { trashedAt: new Date() });
 
-    const rail = await listInboxes();
+    const rail = await listInboxes(owner);
     expect(rail.unread).toBe(0);
     expect(rail.catchAll[0].unread).toBe(0);
     expect(rail.trashed).toBe(1);
 
-    const hits = await searchThreads("invoice", { unread: false, recent: false, attachments: false });
+    const hits = await searchThreads(everything, "invoice", { unread: false, recent: false, attachments: false });
     expect(hits).toHaveLength(0);
   });
 });

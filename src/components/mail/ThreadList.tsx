@@ -3,6 +3,7 @@ import { requireViewer } from "@/lib/auth/require";
 import { formatWhen, snippet } from "@/lib/format";
 import { addressColor, initials, localPart } from "@/lib/mail/identity";
 import { listThreads, type Box } from "@/lib/mail/queries";
+import type { Reach } from "@/lib/mail/reach";
 import { readerZone } from "@/lib/zone";
 import { SearchField } from "./SearchField";
 import { ThreadRows, type ListItem } from "./ThreadRows";
@@ -24,30 +25,26 @@ interface Props {
 export async function ThreadList({ box = "inbox", address, unreadOnly, before }: Props) {
   // The list is a parallel route slot. A layout does not decide whether a slot
   // renders, so the check cannot be left to the one above it.
-  await requireViewer();
+  const viewer = await requireViewer();
 
-  const { threads, nextCursor } = await listThreads({ box, address, unreadOnly, before });
+  // A route that passes an address has already checked it with requireAddress.
+  const reach: Reach = address ? { kind: "addresses", list: [address] } : viewer.view;
+  const { threads, nextCursor } = await listThreads(reach, { box, unreadOnly, before });
   const zone = await readerZone();
 
-  const items: ListItem[] = threads.map((thread) => {
-    // Sent is identified by the address it left from; everything else by the
-    // address it arrived at.
-    const shown = box === "sent" ? thread.sentFrom : thread.deliveredTo;
-
-    return {
-      id: thread.id,
-      sender: thread.fromName ?? thread.from ?? "Unknown sender",
-      initials: initials(thread.fromName, thread.from),
-      time: formatWhen(thread.lastMessageAt, zone),
-      subject: thread.subject || "(no subject)",
-      snippet: snippet(thread.snippet, 140),
-      address: shown,
-      addressColor: shown ? addressColor(shown) : "var(--ink3)",
-      addressPrefix: box === "sent" ? "from " : "",
-      unread: thread.unread > 0,
-      hasAttachment: thread.hasAttachment,
-    };
-  });
+  const items: ListItem[] = threads.map((thread) => ({
+    id: thread.id,
+    sender: thread.fromName ?? thread.from ?? "Unknown sender",
+    initials: initials(thread.fromName, thread.from),
+    time: formatWhen(thread.lastMessageAt, zone),
+    subject: thread.subject || "(no subject)",
+    snippet: snippet(thread.snippet, 140),
+    address: thread.address,
+    addressColor: addressColor(thread.address),
+    addressPrefix: box === "sent" ? "from " : "",
+    unread: thread.unread > 0,
+    hasAttachment: thread.hasAttachment,
+  }));
 
   const title = address ? (localPart(address) ?? address) : TITLES[box];
   const base = address ? `/a/${encodeURIComponent(address)}` : box === "inbox" ? "/" : `/b/${box}`;

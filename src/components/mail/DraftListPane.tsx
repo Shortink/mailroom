@@ -6,9 +6,9 @@ import { readerZone } from "@/lib/zone";
 
 export async function DraftListPane() {
   // Rendered from a parallel route slot, which the layout above does not gate.
-  await requireViewer();
+  const viewer = await requireViewer();
 
-  const drafts = await listDrafts();
+  const drafts = await listDrafts(viewer);
   const zone = await readerZone();
 
   const items: DraftItem[] = drafts.map((draft) => ({

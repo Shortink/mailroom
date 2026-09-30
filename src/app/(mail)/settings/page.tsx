@@ -7,7 +7,7 @@ import { SettingsClient } from "./SettingsClient";
 export default async function SettingsPage() {
   const viewer = await requireViewer();
   const [{ named }, hidden, imageSenders, loadImages] = await Promise.all([
-    listInboxes(),
+    listInboxes(viewer),
     listHidden(),
     listAllowedSenders(),
     loadsImages(viewer.userId),

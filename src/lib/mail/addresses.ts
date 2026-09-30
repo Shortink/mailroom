@@ -1,6 +1,7 @@
-import { and, asc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, messages, threads } from "../db/schema";
+import { inReach, type Allowed } from "./reach";
 
 export interface AddressDetail {
   address: string;
@@ -18,8 +19,11 @@ export interface AddressDetail {
   lastActivity: Date | null;
 }
 
-export async function loadAddress(address: string): Promise<AddressDetail | null> {
-  const [row] = await db.select().from(addresses).where(eq(addresses.address, address));
+export async function loadAddress(allowed: Allowed, address: string): Promise<AddressDetail | null> {
+  const [row] = await db
+    .select()
+    .from(addresses)
+    .where(and(eq(addresses.address, address), inReach(addresses.address, allowed)));
   if (!row) return null;
 
   const [stats] = await db
@@ -31,7 +35,8 @@ export async function loadAddress(address: string): Promise<AddressDetail | null
       lastActivity: sql<string | null>`max(${messages.receivedAt})`,
     })
     .from(messages)
-    .where(eq(messages.deliveredTo, address));
+    .innerJoin(threads, eq(threads.id, messages.threadId))
+    .where(eq(threads.address, address));
 
   return {
     address: row.address,
@@ -114,34 +119,22 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 // Threads whose address opted into auto-archive drop out of the inbox once
 // they have been quiet for thirty days. Run from the reconcile sweep.
 export async function archiveStaleThreads() {
-  const opted = await db
+  const opted = db
     .select({ address: addresses.address })
     .from(addresses)
     .where(eq(addresses.autoArchive, true));
 
-  if (opted.length === 0) return 0;
+  const archived = await db
+    .update(threads)
+    .set({ archived: true })
+    .where(
+      and(
+        eq(threads.archived, false),
+        lt(threads.lastMessageAt, new Date(Date.now() - THIRTY_DAYS_MS)),
+        inArray(threads.address, opted),
+      ),
+    )
+    .returning({ id: threads.id });
 
-  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
-  let archived = 0;
-
-  for (const { address } of opted) {
-    const stale = await db
-      .selectDistinct({ id: threads.id })
-      .from(threads)
-      .innerJoin(messages, eq(messages.threadId, threads.id))
-      .where(
-        and(
-          eq(threads.archived, false),
-          eq(messages.deliveredTo, address),
-          lt(threads.lastMessageAt, cutoff),
-        ),
-      );
-
-    for (const { id } of stale) {
-      await db.update(threads).set({ archived: true }).where(eq(threads.id, id));
-      archived += 1;
-    }
-  }
-
-  return archived;
+  return archived.length;
 }

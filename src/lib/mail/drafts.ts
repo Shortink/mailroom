@@ -1,6 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, or } from "drizzle-orm";
+import type { Viewer } from "../auth/viewer";
 import { db } from "../db/client";
 import { drafts, threads } from "../db/schema";
+import { inReach } from "./reach";
 
 export interface DraftInput {
   id?: string;
@@ -43,8 +45,25 @@ export async function deleteDraft(id: string) {
   await db.delete(drafts).where(eq(drafts.id, id));
 }
 
-export async function loadDraft(id: string) {
-  const [row] = await db.select().from(drafts).where(eq(drafts.id, id));
+// A draft with no From yet is still its author's to finish, in any view.
+function ownDrafts(viewer: Pick<Viewer, "userId" | "view">) {
+  return and(
+    eq(drafts.createdBy, viewer.userId),
+    or(eq(drafts.fromAddress, ""), inReach(drafts.fromAddress, viewer.view)),
+  );
+}
+
+export async function loadDraft(viewer: Pick<Viewer, "userId" | "allowed">, id: string) {
+  const [row] = await db
+    .select()
+    .from(drafts)
+    .where(
+      and(
+        eq(drafts.id, id),
+        eq(drafts.createdBy, viewer.userId),
+        or(eq(drafts.fromAddress, ""), inReach(drafts.fromAddress, viewer.allowed)),
+      ),
+    );
   return row ?? null;
 }
 
@@ -58,7 +77,7 @@ export interface DraftSummary {
   updatedAt: Date;
 }
 
-export async function listDrafts(): Promise<DraftSummary[]> {
+export async function listDrafts(viewer: Pick<Viewer, "userId" | "view">): Promise<DraftSummary[]> {
   const rows = await db
     .select({
       id: drafts.id,
@@ -72,6 +91,7 @@ export async function listDrafts(): Promise<DraftSummary[]> {
     })
     .from(drafts)
     .leftJoin(threads, eq(threads.id, drafts.threadId))
+    .where(ownDrafts(viewer))
     .orderBy(desc(drafts.updatedAt));
 
   return rows.map(({ threadSubject, ...draft }) => ({
@@ -80,7 +100,7 @@ export async function listDrafts(): Promise<DraftSummary[]> {
   }));
 }
 
-export async function countDrafts() {
-  const rows = await db.select({ id: drafts.id }).from(drafts);
-  return rows.length;
+export async function countDrafts(viewer: Pick<Viewer, "userId" | "view">) {
+  const [row] = await db.select({ n: count() }).from(drafts).where(ownDrafts(viewer));
+  return row?.n ?? 0;
 }
