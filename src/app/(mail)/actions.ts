@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { record } from "@/lib/auth/audit";
-import { requireViewer } from "@/lib/auth/require";
+import { requireOwner, requireViewer } from "@/lib/auth/require";
 import { deleteDraft, saveDraft, type DraftInput } from "@/lib/mail/drafts";
 import { retryFailed } from "@/lib/mail/reconcile";
 import { draft, outgoing } from "@/lib/mail/limits";
@@ -55,15 +55,15 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
 
   try {
     const messageId = input.threadId
-      ? await sendReply({ threadId: input.threadId, ...parsed.data })
-      : await sendNew(parsed.data);
+      ? await sendReply(viewer.allowed, { threadId: input.threadId, ...parsed.data })
+      : await sendNew(viewer.allowed, parsed.data);
 
     // Resend publishes the assigned id shortly after delivery; the reconcile
     // sweep is the fallback if this misses.
     after(() => captureMessageId(messageId));
 
     // The draft existed only until the message left.
-    if (input.draftId) await deleteDraft(input.draftId);
+    if (input.draftId) await deleteDraft(viewer.userId, input.draftId);
 
     await record("message.sent", {
       actor: viewer.userId,
@@ -78,20 +78,20 @@ export async function sendMessage(input: SendInput): Promise<SendResult> {
 }
 
 export async function archiveThread(threadId: string, archived: boolean) {
-  await requireViewer();
-  await setArchived(threadId, archived);
+  const viewer = await requireViewer();
+  await setArchived(viewer.allowed, threadId, archived);
   revalidatePath("/", "layout");
 }
 
 export async function trashThread(threadId: string) {
-  await requireViewer();
-  await setTrashed(threadId, true);
+  const viewer = await requireViewer();
+  await setTrashed(viewer.allowed, threadId, true);
   revalidatePath("/", "layout");
 }
 
 export async function restoreThread(threadId: string) {
-  await requireViewer();
-  const restored = await setTrashed(threadId, false);
+  const viewer = await requireViewer();
+  const restored = await setTrashed(viewer.allowed, threadId, false);
   revalidatePath("/", "layout");
   // Same reason as deleteThread: a push from the client after the refresh
   // above fell back to reloading the thread instead of leaving it.
@@ -99,8 +99,8 @@ export async function restoreThread(threadId: string) {
 }
 
 export async function deleteThread(threadId: string) {
-  await requireViewer();
-  await deleteForever(threadId);
+  const viewer = await requireViewer();
+  await deleteForever(viewer.allowed, threadId);
   revalidatePath("/", "layout");
   // Leaving from here rather than the client, because the refresh above would
   // otherwise render the thread page for a thread that no longer exists.
@@ -115,15 +115,15 @@ export async function storeDraft(input: DraftInput) {
   const parsed = draft.safeParse(input);
   if (!parsed.success) return null;
 
-  const id = await saveDraft(viewer.userId, parsed.data);
-  revalidatePath("/", "layout");
+  const id = await saveDraft(viewer, parsed.data);
+  if (id) revalidatePath("/", "layout");
   return id;
 }
 
 export async function discardDraft(id: string) {
-  await requireViewer();
+  const viewer = await requireViewer();
 
-  await deleteDraft(id);
+  await deleteDraft(viewer.userId, id);
   revalidatePath("/", "layout");
 }
 
@@ -154,9 +154,9 @@ export async function searchMail(query: string, scope: SearchScope): Promise<Sea
 // Marking read has to happen in an action rather than during the thread
 // render, so the list and rail can be revalidated with the new counts.
 export async function markRead(threadId: string) {
-  await requireViewer();
+  const viewer = await requireViewer();
 
-  await markThreadRead(threadId);
+  await markThreadRead(viewer.allowed, threadId);
   revalidatePath("/", "layout");
 }
 
@@ -172,7 +172,7 @@ export async function showImages(messageId: string) {
 // Takes the message rather than an address, so the allowance can only ever
 // name someone who actually wrote in.
 export async function alwaysShowImages(messageId: string) {
-  const viewer = await requireViewer();
+  const viewer = await requireOwner();
 
   const from = await loadSender(viewer.allowed, messageId);
   if (from) await allowSender(from);
@@ -180,14 +180,14 @@ export async function alwaysShowImages(messageId: string) {
 }
 
 export async function stopShowingImages(sender: string) {
-  await requireViewer();
+  await requireOwner();
 
   await disallowSender(sender);
   revalidatePath("/", "layout");
 }
 
 export async function retryFailedMail() {
-  await requireViewer();
+  await requireOwner();
 
   const result = await retryFailed();
   revalidatePath("/", "layout");

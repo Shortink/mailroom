@@ -2,7 +2,8 @@ import { and, count, desc, eq, or } from "drizzle-orm";
 import type { Viewer } from "../auth/viewer";
 import { db } from "../db/client";
 import { drafts, threads } from "../db/schema";
-import { inReach } from "./reach";
+import { normalizeAddress } from "./identity";
+import { inReach, reachesAddress } from "./reach";
 
 export interface DraftInput {
   id?: string;
@@ -14,11 +15,24 @@ export interface DraftInput {
 }
 
 // The composer saves as you type, so the first save creates the row and every
-// later one updates it in place.
-export async function saveDraft(userId: string, input: DraftInput) {
+// later one updates it in place. Returns null when the address or thread is
+// out of reach.
+export async function saveDraft(viewer: Pick<Viewer, "userId" | "allowed">, input: DraftInput) {
+  const from = normalizeAddress(input.from);
+
+  if (input.threadId) {
+    const [thread] = await db
+      .select({ address: threads.address })
+      .from(threads)
+      .where(and(eq(threads.id, input.threadId), inReach(threads.address, viewer.allowed)));
+    if (!thread || from !== thread.address) return null;
+  } else if (from && !(await reachesAddress(viewer.allowed, from))) {
+    return null;
+  }
+
   const values = {
     threadId: input.threadId ?? null,
-    fromAddress: input.from,
+    fromAddress: from,
     to: input.to,
     subject: input.subject,
     body: input.body,
@@ -29,20 +43,20 @@ export async function saveDraft(userId: string, input: DraftInput) {
     const [row] = await db
       .update(drafts)
       .set(values)
-      .where(and(eq(drafts.id, input.id), eq(drafts.createdBy, userId)))
+      .where(and(eq(drafts.id, input.id), eq(drafts.createdBy, viewer.userId)))
       .returning({ id: drafts.id });
     if (row) return row.id;
   }
 
   const [row] = await db
     .insert(drafts)
-    .values({ ...values, createdBy: userId })
+    .values({ ...values, createdBy: viewer.userId })
     .returning({ id: drafts.id });
   return row.id;
 }
 
-export async function deleteDraft(id: string) {
-  await db.delete(drafts).where(eq(drafts.id, id));
+export async function deleteDraft(userId: string, id: string) {
+  await db.delete(drafts).where(and(eq(drafts.id, id), eq(drafts.createdBy, userId)));
 }
 
 // A draft with no From yet is still its author's to finish, in any view.

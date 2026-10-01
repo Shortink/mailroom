@@ -164,7 +164,7 @@ describe("markThreadRead", () => {
   it("stamps unread messages and leaves the address where it was", async () => {
     const threadId = await seedThread({ subject: "a", at: "2026-09-01", deliveredTo: "hi@x.test", unread: true });
 
-    await markThreadRead(threadId);
+    await markThreadRead("all", threadId);
 
     const [msg] = await db.select().from(messages).where(eq(messages.threadId, threadId));
     expect(msg.readAt).not.toBeNull();
@@ -177,7 +177,7 @@ describe("markThreadRead", () => {
     const threadId = await seedThread({ subject: "a", at: "2026-09-01", deliveredTo: "hi@x.test" });
     const [before] = await db.select().from(messages).where(eq(messages.threadId, threadId));
 
-    await markThreadRead(threadId);
+    await markThreadRead("all", threadId);
 
     const [after] = await db.select().from(messages).where(eq(messages.threadId, threadId));
     expect(after.readAt?.getTime()).toBe(before.readAt?.getTime());

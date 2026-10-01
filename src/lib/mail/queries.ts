@@ -261,15 +261,23 @@ export async function loadSender(allowed: Allowed, messageId: string) {
   return row?.from ?? null;
 }
 
-export async function markThreadRead(threadId: string) {
+export async function markThreadRead(allowed: Allowed, threadId: string) {
+  const reachable = db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(and(eq(threads.id, threadId), inReach(threads.address, allowed)));
+
   await db
     .update(messages)
     .set({ readAt: new Date() })
-    .where(and(eq(messages.threadId, threadId), isNull(messages.readAt)));
+    .where(and(inArray(messages.threadId, reachable), isNull(messages.readAt)));
 }
 
-export async function setArchived(threadId: string, archived: boolean) {
-  await db.update(threads).set({ archived }).where(eq(threads.id, threadId));
+export async function setArchived(allowed: Allowed, threadId: string, archived: boolean) {
+  await db
+    .update(threads)
+    .set({ archived })
+    .where(and(eq(threads.id, threadId), inReach(threads.address, allowed)));
 }
 
 export async function countFailed(view: Reach) {

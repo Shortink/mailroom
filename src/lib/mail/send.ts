@@ -1,7 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { addresses, messages, threads } from "../db/schema";
 import { sendingIdentity } from "./addresses";
+import { normalizeAddress } from "./identity";
+import { inReach, reachesAddress, type Allowed } from "./reach";
 import { getEmail, sendEmail } from "./resend";
 
 const MAX_ATTEMPTS = 5;
@@ -13,7 +15,17 @@ export interface Outgoing {
   text: string;
 }
 
-export async function sendReply(input: Outgoing & { threadId: string }) {
+export async function sendReply(allowed: Allowed, raw: Outgoing & { threadId: string }) {
+  const from = normalizeAddress(raw.from);
+
+  const [thread] = await db
+    .select({ address: threads.address })
+    .from(threads)
+    .where(and(eq(threads.id, raw.threadId), inReach(threads.address, allowed)));
+  if (!thread) throw new Error("That conversation isn't available.");
+  if (from !== thread.address) throw new Error(`Replies here go from ${thread.address}.`);
+
+  const input = { ...raw, from };
   const [previous] = await db
     .select()
     .from(messages)
@@ -44,15 +56,19 @@ export async function sendReply(input: Outgoing & { threadId: string }) {
   return messageId;
 }
 
-export async function sendNew(input: Outgoing) {
-  await db.insert(addresses).values({ address: input.from }).onConflictDoNothing();
+export async function sendNew(allowed: Allowed, raw: Outgoing) {
+  const from = normalizeAddress(raw.from);
+  if (!(await reachesAddress(allowed, from))) throw new Error("You can't send from that address.");
+
+  const input = { ...raw, from };
+  await db.insert(addresses).values({ address: from }).onConflictDoNothing();
 
   const [thread] = await db
     .insert(threads)
     .values({
-      address: input.from,
+      address: from,
       subject: input.subject,
-      participants: [input.from, ...input.to],
+      participants: [from, ...input.to],
       messageCount: 1,
     })
     .returning();

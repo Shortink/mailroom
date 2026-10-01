@@ -37,11 +37,11 @@ describe("senderOf", () => {
 
 describe("imageRules", () => {
   it("blocks by default", async () => {
-    expect(await imageRules([inbound()], false)).toEqual([null]);
+    expect(await imageRules([inbound()], false, true)).toEqual([null]);
   });
 
   it("loads everything when the reader said so", async () => {
-    expect(await imageRules([inbound(), inbound({ fromAddress: "a@b.test" })], true)).toEqual([
+    expect(await imageRules([inbound(), inbound({ fromAddress: "a@b.test" })], true, true)).toEqual([
       "all",
       "all",
     ]);
@@ -51,26 +51,26 @@ describe("imageRules", () => {
     await allowSender("Shop <NEWS@shop.test>");
     expect(await listAllowedSenders()).toEqual(["news@shop.test"]);
 
-    const rules = await imageRules([inbound({ fromAddress: "Shop News <news@shop.test>" })], false);
+    const rules = await imageRules([inbound({ fromAddress: "Shop News <news@shop.test>" })], false, true);
     expect(rules).toEqual(["sender"]);
   });
 
   it("never loads for mail that failed authentication, whatever the settings", async () => {
     await allowSender("news@shop.test");
 
-    expect(await imageRules([inbound({ verdict: "fail" })], false)).toEqual([null]);
-    expect(await imageRules([inbound({ verdict: "fail" })], true)).toEqual([null]);
+    expect(await imageRules([inbound({ verdict: "fail" })], false, true)).toEqual([null]);
+    expect(await imageRules([inbound({ verdict: "fail" })], true, true)).toEqual([null]);
   });
 
   it("still loads when authentication is unknown, which most mail is", async () => {
     await allowSender("news@shop.test");
-    expect(await imageRules([inbound({ verdict: "unknown" })], false)).toEqual(["sender"]);
+    expect(await imageRules([inbound({ verdict: "unknown" })], false, true)).toEqual(["sender"]);
   });
 
   it("stops once the sender is removed", async () => {
     await allowSender("news@shop.test");
     await disallowSender("Shop <news@shop.test>");
 
-    expect(await imageRules([inbound()], false)).toEqual([null]);
+    expect(await imageRules([inbound()], false, true)).toEqual([null]);
   });
 });

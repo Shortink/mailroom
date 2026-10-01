@@ -50,8 +50,8 @@ describe("Trash", () => {
   it("takes a thread out of every other box and shows it in Trash", async () => {
     const { threadId } = await seedThread("kept");
     const archived = await seedThread("archived", { archived: true });
-    await setTrashed(threadId, true);
-    await setTrashed(archived.threadId, true);
+    await setTrashed("all", threadId, true);
+    await setTrashed("all", archived.threadId, true);
 
     expect((await listThreads(everything, {})).threads).toHaveLength(0);
     expect((await listThreads(everything, { box: "archive" })).threads).toHaveLength(0);
@@ -62,8 +62,8 @@ describe("Trash", () => {
 
   it("puts a restored thread back where it was", async () => {
     const { threadId } = await seedThread("back", { archived: true });
-    await setTrashed(threadId, true);
-    await setTrashed(threadId, false);
+    await setTrashed("all", threadId, true);
+    await setTrashed("all", threadId, false);
 
     expect((await listThreads(everything, { box: "archive" })).threads).toHaveLength(1);
     expect((await listThreads(everything, { box: "trash" })).threads).toHaveLength(0);
@@ -126,13 +126,13 @@ describe("emptyOldTrash", () => {
 describe("deleteForever", () => {
   it("deletes a thread in Trash straight away", async () => {
     const { threadId } = await seedThread("gone", { trashedAt: new Date() });
-    await deleteForever(threadId);
+    await deleteForever("all", threadId);
     expect(await db.select().from(threads)).toHaveLength(0);
   });
 
   it("refuses a thread that is not in Trash", async () => {
     const { threadId } = await seedThread("safe");
-    await deleteForever(threadId);
+    await deleteForever("all", threadId);
     expect(await db.select().from(threads)).toHaveLength(1);
   });
 });

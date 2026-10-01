@@ -103,7 +103,15 @@ function measure(nonce: string, images: boolean) {
 </script>`;
 }
 
-export function MessageThread({ messages, nonce }: { messages: ThreadMessage[]; nonce: string }) {
+export function MessageThread({
+  messages,
+  nonce,
+  owner,
+}: {
+  messages: ThreadMessage[];
+  nonce: string;
+  owner: boolean;
+}) {
   // The message you came to read, plus your own last reply.
   const [expanded, setExpanded] = useState<string[]>(() => {
     const latest = messages.at(-1)?.id;
@@ -123,6 +131,7 @@ export function MessageThread({ messages, nonce }: { messages: ThreadMessage[]; 
             key={message.id}
             message={message}
             nonce={nonce}
+            owner={owner}
             onCollapse={() => toggle(message.id)}
           />
         ) : (
@@ -167,10 +176,12 @@ function Collapsed({ message, onExpand }: { message: ThreadMessage; onExpand: ()
 function Expanded({
   message,
   nonce,
+  owner,
   onCollapse,
 }: {
   message: ThreadMessage;
   nonce: string;
+  owner: boolean;
   onCollapse: () => void;
 }) {
   const [headersOpen, setHeadersOpen] = useState(false);
@@ -217,7 +228,7 @@ function Expanded({
 
       {headersOpen && <Headers headers={message.headers} />}
 
-      <Body message={message} nonce={nonce} />
+      <Body message={message} nonce={nonce} owner={owner} />
 
       {message.files.length > 0 && <Attachments files={message.files} />}
 
@@ -314,7 +325,7 @@ function Headers({ headers }: { headers: Header[] }) {
   );
 }
 
-function Body({ message, nonce }: { message: ThreadMessage; nonce: string }) {
+function Body({ message, nonce, owner }: { message: ThreadMessage; nonce: string; owner: boolean }) {
   const [withImages, setWithImages] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showQuoted, setShowQuoted] = useState(false);
@@ -393,6 +404,7 @@ function Body({ message, nonce }: { message: ThreadMessage; nonce: string }) {
                 rule={message.images}
                 loaded={withImages !== null}
                 sender={message.sender}
+                owner={owner}
                 failed={message.auth.verdict === "fail"}
                 loading={loading}
                 onLoad={load}
@@ -474,6 +486,7 @@ function Privacy({
   rule,
   loaded,
   sender,
+  owner,
   failed,
   loading,
   onLoad,
@@ -483,6 +496,7 @@ function Privacy({
   rule: ImageRule;
   loaded: boolean;
   sender: string | null;
+  owner: boolean;
   failed: boolean;
   loading: boolean;
   onLoad: () => void;
@@ -509,8 +523,8 @@ function Privacy({
   }
 
   // Allowing the sender would change nothing for mail that failed, and the
-  // sender is the part in doubt.
-  const canAllow = Boolean(sender) && !failed;
+  // sender is the part in doubt. The allowlist is the owner's alone.
+  const canAllow = owner && Boolean(sender) && !failed;
 
   const alwaysButton = canAllow && (
     <button type="button" onClick={onAlways} disabled={loading} className={small}>

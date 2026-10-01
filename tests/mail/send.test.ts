@@ -46,7 +46,7 @@ describe("sendReply", () => {
   it("threads the outgoing message for the recipient", async () => {
     const threadId = await seedThread();
 
-    await sendReply({
+    await sendReply("all", {
       threadId,
       from: "hi@example.test",
       to: ["billing@vendor.test"],
@@ -62,7 +62,7 @@ describe("sendReply", () => {
   it("stores the reply as pending, since Resend assigns the id later", async () => {
     const threadId = await seedThread();
 
-    await sendReply({
+    await sendReply("all", {
       threadId, from: "hi@example.test", to: ["billing@vendor.test"],
       subject: "Re: Invoice", text: "paid",
     });
@@ -77,7 +77,7 @@ describe("sendReply", () => {
   it("omits threading headers when no prior message has an id", async () => {
     const thread = await newThread("hi@example.test", { subject: "New" });
 
-    await sendReply({
+    await sendReply("all", {
       threadId: thread.id, from: "hi@example.test", to: ["x@vendor.test"],
       subject: "New", text: "hello",
     });
@@ -88,8 +88,18 @@ describe("sendReply", () => {
 });
 
 describe("sendNew", () => {
+  it("refuses an address outside the scope without calling Resend", async () => {
+    await expect(
+      sendNew(
+        { kind: "addresses", list: ["alex@example.test"] },
+        { from: "you@example.test", to: ["dana@northbound.co"], subject: "s", text: "t" },
+      ),
+    ).rejects.toThrow();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it("creates a thread and registers the sending address", async () => {
-    await sendNew({
+    await sendNew("all", {
       from: "hi@example.test",
       to: ["dana@northbound.co"],
       subject: "September availability",
@@ -111,7 +121,7 @@ describe("sendNew", () => {
 describe("captureMessageId", () => {
   it("records the id Resend assigned once delivered", async () => {
     const threadId = await seedThread();
-    await sendReply({
+    await sendReply("all", {
       threadId, from: "hi@example.test", to: ["billing@vendor.test"],
       subject: "Re: Invoice", text: "paid",
     });
@@ -127,7 +137,7 @@ describe("captureMessageId", () => {
 
   it("leaves a queued message pending so the sweep retries it", async () => {
     const threadId = await seedThread();
-    await sendReply({
+    await sendReply("all", {
       threadId, from: "hi@example.test", to: ["billing@vendor.test"],
       subject: "Re: Invoice", text: "paid",
     });
@@ -144,7 +154,7 @@ describe("captureMessageId", () => {
 
   it("gives up after five attempts rather than retrying forever", async () => {
     const threadId = await seedThread();
-    await sendReply({
+    await sendReply("all", {
       threadId, from: "hi@example.test", to: ["billing@vendor.test"],
       subject: "Re: Invoice", text: "paid",
     });
@@ -160,7 +170,7 @@ describe("captureMessageId", () => {
 
   it("does nothing for a message already complete", async () => {
     const threadId = await seedThread();
-    await sendReply({
+    await sendReply("all", {
       threadId, from: "hi@example.test", to: ["billing@vendor.test"],
       subject: "Re: Invoice", text: "paid",
     });

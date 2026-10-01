@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../../src/lib/db/client";
-import { attachments, drafts, memberAddresses } from "../../src/lib/db/schema";
+import { addresses, attachments, drafts, imageSenders, memberAddresses, messages, threads } from "../../src/lib/db/schema";
 import { SESSION_COOKIE, signSession } from "../../src/lib/auth/session";
 import { VIEW_COOKIE, loadViewer, type Viewer } from "../../src/lib/auth/viewer";
 import { newUser, seedMessage } from "../helpers";
@@ -31,12 +31,24 @@ vi.mock("../../src/lib/storage", () => ({
   getStorage: () => ({ put: vi.fn(), get, delete: vi.fn(), url: (k: string) => `/api/attachments/${k}` }),
 }));
 
+const sendEmail = vi.fn(async (_input: unknown) => ({ id: "re_1" }));
+vi.mock("../../src/lib/mail/resend", () => ({
+  sendEmail: (input: unknown) => sendEmail(input),
+  getEmail: vi.fn(),
+  getReceivedEmail: vi.fn(),
+  getAttachment: vi.fn(),
+  downloadAttachment: vi.fn(),
+}));
+
 const { listThreads, listInboxes, loadThread, loadMessageHtml, loadSender, countFailed, searchThreads } =
   await import("../../src/lib/mail/queries");
 const { listDrafts, loadDraft } = await import("../../src/lib/mail/drafts");
 const { loadAddress } = await import("../../src/lib/mail/addresses");
 const { requireAddress, requireOwner } = await import("../../src/lib/auth/require");
 const { GET: getAttachment } = await import("../../src/app/api/attachments/[key]/route");
+const actions = await import("../../src/app/(mail)/actions");
+const settings = await import("../../src/app/(mail)/settings/actions");
+const { imageRules } = await import("../../src/lib/mail/images");
 
 const YOU = "you@example.test";
 const ALEX = "alex@example.test";
@@ -178,5 +190,156 @@ describe("the owner", () => {
     const subjects = (await listThreads(owner.view, {})).threads.map((t) => t.subject);
     expect(subjects).toContain("surprise");
     expect(subjects).not.toContain("for alex");
+  });
+});
+
+describe("a member's writes on the owner's thread", () => {
+  beforeEach(async () => {
+    sendEmail.mockClear();
+    await signInAs(memberId);
+  });
+
+  async function youThread() {
+    const [row] = await db.select().from(threads).where(eq(threads.id, you.threadId));
+    return row;
+  }
+
+  it("cannot mark it read", async () => {
+    await actions.markRead(you.threadId);
+    const [message] = await db.select().from(messages).where(eq(messages.id, you.messageId));
+    expect(message.readAt).toBeNull();
+  });
+
+  it("cannot archive, trash, restore or delete it", async () => {
+    await actions.archiveThread(you.threadId, true);
+    await actions.trashThread(you.threadId);
+    expect(await youThread()).toMatchObject({ archived: false, trashedAt: null });
+
+    await db.update(threads).set({ trashedAt: new Date() }).where(eq(threads.id, you.threadId));
+    await expect(actions.restoreThread(you.threadId)).rejects.toThrow("REDIRECT");
+    await expect(actions.deleteThread(you.threadId)).rejects.toThrow("REDIRECT");
+    expect((await youThread()).trashedAt).not.toBeNull();
+  });
+
+  it("cannot touch the owner's draft", async () => {
+    const [draft] = await db.select().from(drafts);
+    await actions.storeDraft({ id: draft.id, from: ALEX, to: "x@y.test", subject: "hijack", body: "" });
+    await actions.discardDraft(draft.id);
+    const [after] = await db.select().from(drafts).where(eq(drafts.id, draft.id));
+    expect(after.subject).toBe("owner draft");
+  });
+
+  it("cannot draft a reply on it, or from the wrong address on their own", async () => {
+    expect(await actions.storeDraft({ threadId: you.threadId, from: YOU, to: "", subject: "", body: "x" })).toBeNull();
+    expect(await actions.storeDraft({ threadId: alex.threadId, from: YOU, to: "", subject: "", body: "x" })).toBeNull();
+    expect(await actions.storeDraft({ threadId: alex.threadId, from: ALEX, to: "", subject: "", body: "x" })).not.toBeNull();
+  });
+
+  it("cannot send from the owner's address or reply on the owner's thread", async () => {
+    const fromYou = await actions.sendMessage({ from: YOU, to: "x@y.test", subject: "s", text: "t" });
+    const reply = await actions.sendMessage({ threadId: you.threadId, from: YOU, to: "x@y.test", subject: "s", text: "t" });
+    const wrongFrom = await actions.sendMessage({ threadId: alex.threadId, from: YOU, to: "x@y.test", subject: "s", text: "t" });
+
+    expect([fromYou.ok, reply.ok, wrongFrom.ok]).toEqual([false, false, false]);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("can reply on their own thread", async () => {
+    const sent = await actions.sendMessage({ threadId: alex.threadId, from: ALEX, to: "x@y.test", subject: "s", text: "t" });
+    expect(sent.ok).toBe(true);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("can send from their own address", async () => {
+    const sent = await actions.sendMessage({ from: ALEX, to: "x@y.test", subject: "s", text: "t" });
+    expect(sent.ok).toBe(true);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("cannot change the owner's address, whatever its case", async () => {
+    await expect(settings.saveAddress(YOU, { displayName: "x" })).rejects.toThrow("NOT_FOUND");
+    await expect(settings.saveAddress("You@Example.test", { displayName: "x" })).rejects.toThrow("NOT_FOUND");
+  });
+
+  it("keeps only the member's own fields on their address", async () => {
+    await settings.saveAddress(ALEX, { pinned: true, hidden: true, label: "Mine", displayName: "Alex", hue: 42 });
+    const [row] = await db.select().from(addresses).where(eq(addresses.address, ALEX));
+    expect(row).toMatchObject({ pinned: false, hidden: false, label: null, displayName: "Alex", hue: 42 });
+  });
+
+  it.each([
+    ["saveOrder", () => settings.saveOrder([ALEX])],
+    ["addAccount", () => settings.addAccount("new@example.test")],
+    ["issueInvite", () => settings.issueInvite()],
+    ["alwaysShowImages", () => actions.alwaysShowImages(alex.messageId)],
+    ["stopShowingImages", () => actions.stopShowingImages("sender@vendor.test")],
+    ["retryFailedMail", () => actions.retryFailedMail()],
+  ])("is refused %s", async (_name, call) => {
+    await expect(call()).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("images", () => {
+  it("ignore the owner's sender allowlist in a member's thread", async () => {
+    await db.insert(imageSenders).values({ address: "sender@vendor.test" });
+    const message = { direction: "inbound", fromAddress: "sender@vendor.test", verdict: "pass" as const };
+    expect(await imageRules([message], false, false)).toEqual([null]);
+    expect(await imageRules([message], false, true)).toEqual(["sender"]);
+  });
+});
+
+describe("the owner on a member's thread", () => {
+  it("marks it read for the member too", async () => {
+    await signInAs(ownerId);
+    await actions.markRead(alex.threadId);
+    const [message] = await db.select().from(messages).where(eq(messages.id, alex.messageId));
+    expect(message.readAt).not.toBeNull();
+  });
+});
+
+describe("a member's drafts", () => {
+  it("list and open only those under their own addresses", async () => {
+    await signInAs(memberId);
+    const fromAlex = await actions.storeDraft({ from: ALEX, to: "", subject: "from alex", body: "" });
+    const blank = await actions.storeDraft({ from: "", to: "", subject: "no from", body: "" });
+    const [fromYou] = await db
+      .insert(drafts)
+      .values({ fromAddress: YOU, subject: "from you", createdBy: memberId })
+      .returning();
+
+    const member = await viewerFor(memberId);
+    expect((await listDrafts(member)).map((d) => d.subject).sort()).toEqual(["from alex", "no from"]);
+    expect(await loadDraft(member, fromAlex!)).not.toBeNull();
+    expect(await loadDraft(member, blank!)).not.toBeNull();
+    expect(await loadDraft(member, fromYou.id)).toBeNull();
+  });
+});
+
+describe("a member's point lookups on their own address", () => {
+  it("find the message, sender and address", async () => {
+    const { allowed } = await viewerFor(memberId);
+    expect(await loadMessageHtml(allowed, alex.messageId)).not.toBeNull();
+    expect(await loadSender(allowed, alex.messageId)).not.toBeNull();
+    expect(await loadAddress(allowed, ALEX)).not.toBeNull();
+  });
+});
+
+describe("the rail", () => {
+  it("counts archived and trashed only within the member's addresses", async () => {
+    await db.update(threads).set({ archived: true }).where(eq(threads.id, you.threadId));
+    expect((await listInboxes(await viewerFor(memberId))).archived).toBe(0);
+    expect((await listInboxes(await viewerFor(ownerId))).archived).toBe(1);
+
+    await db.update(threads).set({ trashedAt: new Date() }).where(eq(threads.id, you.threadId));
+    expect((await listInboxes(await viewerFor(memberId))).trashed).toBe(0);
+    expect((await listInboxes(await viewerFor(ownerId))).trashed).toBe(1);
+  });
+
+  it("keeps a member's address out of the owner's All mine", async () => {
+    await db.update(addresses).set({ pinned: true }).where(eq(addresses.address, ALEX));
+    const rail = await listInboxes(await viewerFor(ownerId));
+    const listed = [...rail.named, ...rail.catchAll].map((inbox) => inbox.address);
+    expect(listed).toContain(YOU);
+    expect(listed).not.toContain(ALEX);
   });
 });

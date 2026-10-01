@@ -56,10 +56,12 @@ export interface ImageMessage {
 export async function imageRules(
   messages: ImageMessage[],
   loadAll: boolean,
+  allowlist: boolean,
 ): Promise<ImageRule[]> {
   const senders = [...new Set(messages.map((m) => senderOf(m.fromAddress)).filter(Boolean))];
 
-  const allowed = senders.length
+  // The sender allowlist names the owner's correspondents, so it only applies for owners.
+  const allowed = allowlist && senders.length
     ? await db
         .select({ address: imageSenders.address })
         .from(imageSenders)

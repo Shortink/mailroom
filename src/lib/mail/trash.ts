@@ -2,20 +2,25 @@ import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import { db } from "../db/client";
 import { attachments, messages, threads } from "../db/schema";
 import { getStorage } from "../storage";
+import { inReach, type Allowed } from "./reach";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-export async function setTrashed(threadId: string, trashed: boolean) {
+export async function setTrashed(allowed: Allowed, threadId: string, trashed: boolean) {
   const [row] = await db
     .update(threads)
     .set({ trashedAt: trashed ? new Date() : null })
-    .where(eq(threads.id, threadId))
+    .where(and(eq(threads.id, threadId), inReach(threads.address, allowed)))
     .returning({ archived: threads.archived });
   return row ?? null;
 }
 
-export async function deleteForever(threadId: string) {
-  await purge([threadId]);
+export async function deleteForever(allowed: Allowed, threadId: string) {
+  const [thread] = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(and(eq(threads.id, threadId), inReach(threads.address, allowed)));
+  if (thread) await purge([thread.id]);
 }
 
 export async function emptyOldTrash() {

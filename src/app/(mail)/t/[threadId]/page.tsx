@@ -44,9 +44,11 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
   const nonce = crypto.randomUUID();
 
   const verdicts = thread.messages.map((message) => authentication(message));
+  const owner = viewer.role === "owner";
   const rules = await imageRules(
     thread.messages.map((message, index) => ({ ...message, verdict: verdicts[index].verdict })),
     await loadsImages(viewer.userId),
+    owner,
   );
 
   const messages: ThreadMessage[] = thread.messages.map((message, index) => {
@@ -152,7 +154,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
           </p>
         )}
 
-        <MessageThread messages={messages} nonce={nonce} />
+        <MessageThread messages={messages} nonce={nonce} owner={owner} />
 
         {replyTo && !trashed && (
           <QuickReply

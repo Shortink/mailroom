@@ -1,21 +1,23 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { record } from "@/lib/auth/audit";
-import { requireViewer } from "@/lib/auth/require";
+import { requireOwner, requireViewer } from "@/lib/auth/require";
 import { createInvite } from "@/lib/auth/invites";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
+import { normalizeAddress } from "@/lib/mail/identity";
+import { reachesAddress } from "@/lib/mail/reach";
 import { reorderAddresses, updateAddress, type AddressPatch } from "@/lib/mail/addresses";
 import { setLoadsImages } from "@/lib/mail/images";
 import { addressOrder, addressSettings } from "@/lib/mail/limits";
 import { registerAccount } from "@/lib/mail/queries";
 
 export async function addAccount(address: string) {
-  await requireViewer();
+  await requireOwner();
 
   const parsed = z.email().safeParse(address.trim().toLowerCase());
   if (!parsed.success) return { error: "Enter a valid email address." };
@@ -28,7 +30,7 @@ export async function addAccount(address: string) {
 }
 
 export async function issueInvite() {
-  const viewer = await requireViewer();
+  const viewer = await requireOwner();
   const token = await createInvite(viewer.userId);
   await record("invite.created", { actor: viewer.userId });
 
@@ -47,10 +49,18 @@ export async function signOut() {
   redirect("/login");
 }
 
-export async function saveAddress(address: string, patch: AddressPatch) {
-  await requireViewer();
+export async function saveAddress(raw: string, patch: AddressPatch) {
+  const viewer = await requireViewer();
+  const address = normalizeAddress(raw);
+  if (!(await reachesAddress(viewer.allowed, address))) notFound();
 
-  const parsed = addressSettings.safeParse(patch);
+  // The sidebar's pins, visibility and names are the owner's arrangement, so a
+  // member's patch keeps only the fields listed here.
+  const schema =
+    viewer.role === "owner"
+      ? addressSettings
+      : addressSettings.pick({ displayName: true, replyTo: true, hue: true, autoArchive: true });
+  const parsed = schema.safeParse(patch);
   if (!parsed.success) return { error: "Those settings aren't valid." };
 
   await updateAddress(address, parsed.data);
@@ -59,7 +69,7 @@ export async function saveAddress(address: string, patch: AddressPatch) {
 }
 
 export async function saveOrder(order: string[]) {
-  await requireViewer();
+  await requireOwner();
 
   const parsed = addressOrder.safeParse(order);
   if (!parsed.success) return;
