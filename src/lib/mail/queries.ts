@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { addresses, attachments, messages, threads } from "../db/schema";
+import { addresses, attachments, memberAddresses, messages, threads, users } from "../db/schema";
 import type { Viewer } from "../auth/viewer";
 import { countDrafts } from "./drafts";
 import { inReach, type Allowed, type Reach } from "./reach";
@@ -40,7 +40,7 @@ export interface ThreadPage {
 
 const PAGE_SIZE = 50;
 
-// Counted the same way wherever an unread number is shown.
+// Shared by the rail's address rows and the switcher, so the two agree.
 const unreadCount = sql<number>`count(${messages.id}) filter (where ${messages.readAt} is null and ${messages.status} = 'complete' and ${threads.trashedAt} is null)::int`;
 
 // Which threads belong in this view, newest first, one page at a time. Kept
@@ -203,6 +203,68 @@ export async function listInboxes(viewer: Pick<Viewer, "userId" | "role" | "view
     drafts: draftCount,
     archived: archived?.n ?? 0,
     trashed: trashed?.n ?? 0,
+  };
+}
+
+export interface ViewEntry {
+  address: string;
+  label: string | null;
+  hue: number | null;
+  unread: number;
+  // Who holds the address. Empty for the owner's own.
+  members: string[];
+}
+
+export interface Switcher {
+  allUnread: number;
+  own: ViewEntry[];
+  members: ViewEntry[];
+}
+
+// Every view the viewer can switch to, counted independently of the current one.
+export async function listSwitcher(viewer: Pick<Viewer, "role" | "allowed">): Promise<Switcher> {
+  const rows = await db
+    .select({
+      address: addresses.address,
+      label: addresses.label,
+      hue: addresses.hue,
+      pinned: addresses.pinned,
+      hidden: addresses.hidden,
+      members: sql<string[]>`coalesce((
+        select array_agg(${users.email} order by ${users.email})
+        from ${memberAddresses} join ${users} on ${users.id} = ${memberAddresses.userId}
+        where ${memberAddresses.address} = ${addresses.address}
+      ), '{}')`,
+      unread: unreadCount,
+    })
+    .from(addresses)
+    .leftJoin(threads, eq(threads.address, addresses.address))
+    .leftJoin(messages, eq(messages.threadId, threads.id))
+    .where(inReach(addresses.address, viewer.allowed))
+    .groupBy(addresses.address)
+    .orderBy(sql`${addresses.position} asc nulls last`, asc(addresses.address));
+
+  const entry = ({ address, label, hue, unread, members }: (typeof rows)[number]) => ({
+    address,
+    label,
+    hue,
+    unread,
+    members,
+  });
+  const sum = (list: typeof rows) => list.reduce((total, row) => total + row.unread, 0);
+
+  // Who else holds a shared address is the owner's business, and anything in
+  // these entries reaches the browser even when the switcher draws nothing.
+  if (viewer.role !== "owner") {
+    return { allUnread: sum(rows), own: rows.map((row) => ({ ...entry(row), members: [] })), members: [] };
+  }
+
+  // Catch-all addresses are not entries; they stay inside "All mine".
+  const unassigned = rows.filter((row) => row.members.length === 0);
+  return {
+    allUnread: sum(unassigned),
+    own: unassigned.filter((row) => row.pinned && !row.hidden).map(entry),
+    members: rows.filter((row) => row.members.length > 0).map(entry),
   };
 }
 

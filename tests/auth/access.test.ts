@@ -40,7 +40,7 @@ vi.mock("../../src/lib/mail/resend", () => ({
   downloadAttachment: vi.fn(),
 }));
 
-const { listThreads, listInboxes, loadThread, loadMessageHtml, loadSender, countFailed, searchThreads } =
+const { listThreads, listInboxes, listSwitcher, loadThread, loadMessageHtml, loadSender, countFailed, searchThreads } =
   await import("../../src/lib/mail/queries");
 const { listDrafts, loadDraft } = await import("../../src/lib/mail/drafts");
 const { loadAddress } = await import("../../src/lib/mail/addresses");
@@ -341,5 +341,57 @@ describe("the rail", () => {
     const listed = [...rail.named, ...rail.catchAll].map((inbox) => inbox.address);
     expect(listed).toContain(YOU);
     expect(listed).not.toContain(ALEX);
+  });
+});
+
+describe("the switcher", () => {
+  it("shows an owner their pinned addresses and each member's", async () => {
+    await db.execute(sql`update addresses set pinned = true`);
+    await seedMessage({ address: "hidden@example.test", subject: "tucked away" });
+    await db.execute(sql`update addresses set pinned = true, hidden = true where address = 'hidden@example.test'`);
+    const switcher = await listSwitcher(await viewerFor(ownerId));
+
+    expect(switcher.own.map((entry) => entry.address)).toEqual([YOU]);
+    expect(switcher.members).toEqual([expect.objectContaining({ address: ALEX, members: ["friend@example.test"], unread: 1 })]);
+    // A hidden address has no entry, but its mail still counts toward "All mine".
+    expect(switcher.allUnread).toBe(2);
+  });
+
+  it("shows a member only their own", async () => {
+    const switcher = await listSwitcher(await viewerFor(memberId));
+    expect(switcher.own.map((entry) => entry.address)).toEqual([ALEX]);
+    expect(switcher.members).toEqual([]);
+  });
+
+  it("never tells a member who else holds their address", async () => {
+    const other = await newUser("other@example.test", "member");
+    await db.insert(memberAddresses).values({ userId: other.id, address: ALEX });
+
+    const member = await listSwitcher(await viewerFor(memberId));
+    expect(member.own.map((entry) => entry.members)).toEqual([[]]);
+
+    const owner = await listSwitcher(await viewerFor(ownerId));
+    expect(owner.members).toEqual([
+      expect.objectContaining({ address: ALEX, members: ["friend@example.test", "other@example.test"] }),
+    ]);
+  });
+});
+
+describe("setView", () => {
+  it("lets a member choose only their own address", async () => {
+    await signInAs(memberId);
+    await expect(actions.setView("Alex@example.test")).rejects.toThrow("REDIRECT /");
+    expect(jar.get(VIEW_COOKIE)).toBe(ALEX);
+    await expect(actions.setView(YOU)).rejects.toThrow("NOT_FOUND");
+    await expect(actions.setView("all")).rejects.toThrow("REDIRECT /");
+    expect(jar.get(VIEW_COOKIE)).toBe("all");
+  });
+
+  it("lets the owner choose any address", async () => {
+    await signInAs(ownerId);
+    await expect(actions.setView(ALEX)).rejects.toThrow("REDIRECT /");
+    expect(jar.get(VIEW_COOKIE)).toBe(ALEX);
+    await expect(actions.setView(YOU)).rejects.toThrow("REDIRECT /");
+    expect(jar.get(VIEW_COOKIE)).toBe(YOU);
   });
 });

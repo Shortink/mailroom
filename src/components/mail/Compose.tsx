@@ -31,9 +31,11 @@ type State = "idle" | "sending" | "failed";
 
 export function ComposeProvider({
   accounts,
+  locked,
   children,
 }: {
   accounts: string[];
+  locked: boolean;
   children: React.ReactNode;
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -53,6 +55,7 @@ export function ComposeProvider({
         <Composer
           draft={draft}
           accounts={accounts}
+          locked={locked}
           onClose={() => setDraft(null)}
           onSent={(result) => {
             setDraft(null);
@@ -72,11 +75,13 @@ export function ComposeProvider({
 function Composer({
   draft,
   accounts,
+  locked,
   onClose,
   onSent,
 }: {
   draft: Draft;
   accounts: string[];
+  locked: boolean;
   onClose: () => void;
   onSent: (result: { from: string; id: string }) => void;
 }) {
@@ -92,6 +97,9 @@ function Composer({
   const [error, setError] = useState<string | null>(null);
   const [minimised, setMinimised] = useState(false);
   const [picking, setPicking] = useState(false);
+  // In an "All" view with a choice to make. A reply, or a one-address view,
+  // sends from one address only.
+  const choosable = !locked && !draft.threadId && accounts.length > 1;
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -200,17 +208,27 @@ function Composer({
 
           <div className="relative flex items-center gap-3 border-b border-line px-4 py-2.5">
             <span className="w-[52px] flex-none font-mono text-[10.5px] text-ink3">From</span>
-            <button
-              type="button"
-              onClick={() => setPicking((value) => !value)}
-              className="flex items-center gap-2 rounded-lg bg-chip px-2.5 py-1.5 text-[12.5px] transition-colors hover:bg-hover"
-            >
-              <span className="size-[7px] rounded-full" style={{ background: addressColor(from) }} />
-              <span className="font-mono">{from || "no address yet"}</span>
-              <ChevronDownIcon className="size-3 text-ink3" />
-            </button>
+            {choosable ? (
+              <button
+                type="button"
+                onClick={() => setPicking((value) => !value)}
+                className="flex items-center gap-2 rounded-lg bg-chip px-2.5 py-1.5 text-[12.5px] transition-colors hover:bg-hover"
+              >
+                <span className="size-[7px] rounded-full" style={{ background: addressColor(from) }} />
+                <span className="font-mono">{from || "no address yet"}</span>
+                <ChevronDownIcon className="size-3 text-ink3" />
+              </button>
+            ) : (
+              <span className="flex items-center gap-2 px-2.5 py-1.5 text-[12.5px]">
+                <span className="size-[7px] rounded-full" style={{ background: addressColor(from) }} />
+                <span className="font-mono">{from || "no address yet"}</span>
+              </span>
+            )}
+            {!from && accounts.length === 0 && (
+              <span className="text-[12px] text-ink3">Add an address in Settings first.</span>
+            )}
 
-            {picking && (
+            {choosable && picking && (
               <div className="animate-pop-in absolute top-full left-[68px] z-10 w-[290px] rounded-xl border border-line bg-panel2 p-1.5 backdrop-blur-[30px] [box-shadow:var(--dialog-shadow)]">
                 {accounts.map((account) => (
                   <button
@@ -229,11 +247,6 @@ function Composer({
                     <span className="truncate font-mono text-[12px]">{account}</span>
                   </button>
                 ))}
-                {accounts.length === 0 && (
-                  <p className="px-2.5 py-2 text-[12px] text-ink3">
-                    Add an address in Settings first.
-                  </p>
-                )}
               </div>
             )}
           </div>

@@ -10,7 +10,7 @@ import { railCollapsed } from "@/lib/chrome";
 import { requireViewer } from "@/lib/auth/require";
 import { findUser } from "@/lib/auth/users";
 import { formatClock } from "@/lib/format";
-import { countFailed, listInboxes } from "@/lib/mail/queries";
+import { countFailed, listInboxes, listSwitcher } from "@/lib/mail/queries";
 import { readerZone } from "@/lib/zone";
 
 export default async function MailLayout({
@@ -21,14 +21,18 @@ export default async function MailLayout({
   list: React.ReactNode;
 }) {
   const viewer = await requireViewer();
-  const [rail, user, failed] = await Promise.all([
+  const [rail, switcher, user, failed] = await Promise.all([
     listInboxes(viewer),
+    listSwitcher(viewer),
     findUser(viewer.userId),
     countFailed(viewer.view),
   ]);
   const [zone, collapsed] = await Promise.all([readerZone(), railCollapsed()]);
 
-  const accounts = rail.named.map((inbox) => inbox.address);
+  // Compose picks from the addresses in the current view, and a one-address
+  // view only sends from that address.
+  const accounts = viewer.choice ? [viewer.choice] : rail.named.map((inbox) => inbox.address);
+  const defaultFrom = accounts[0] ?? "";
 
   return (
     <ShellFrame>
@@ -50,8 +54,8 @@ export default async function MailLayout({
       <SearchProvider>
         {/* The composer sits at frame level rather than inside the pane, so it
             can still open from the phone inbox where the pane is off screen. */}
-        <ComposeProvider accounts={accounts}>
-          <MobileBar defaultFrom={accounts[0] ?? ""} />
+        <ComposeProvider accounts={accounts} locked={viewer.choice !== null}>
+          <MobileBar defaultFrom={defaultFrom} />
 
           <Rail
             {...rail}
@@ -59,6 +63,9 @@ export default async function MailLayout({
             user={user?.email ?? ""}
             loadedAt={formatClock(new Date(), zone)}
             collapsed={collapsed}
+            switcher={switcher}
+            choice={viewer.choice}
+            owner={viewer.role === "owner"}
           />
 
           <div data-slot="list" className="flex min-w-0 flex-none max-md:min-h-0 max-md:flex-1">
@@ -66,7 +73,7 @@ export default async function MailLayout({
           </div>
 
           <main data-slot="pane" className="relative flex min-w-0 flex-1 flex-col max-md:min-h-0">
-            <PaneToolbar defaultFrom={accounts[0] ?? ""} />
+            <PaneToolbar defaultFrom={defaultFrom} />
             {children}
           </main>
         </ComposeProvider>

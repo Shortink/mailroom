@@ -18,7 +18,8 @@ import {
 } from "@/components/icons";
 import { addressColor, initials, localPart } from "@/lib/mail/identity";
 import { FailedMail } from "./FailedMail";
-import type { Inbox, Rail as RailData } from "@/lib/mail/queries";
+import { Switcher } from "./Switcher";
+import type { Inbox, Rail as RailData, Switcher as SwitcherData } from "@/lib/mail/queries";
 
 interface Props extends RailData {
   // Messages ingest gave up on. They are invisible in the lists, so the only
@@ -27,6 +28,9 @@ interface Props extends RailData {
   user: string;
   loadedAt: string;
   collapsed: boolean;
+  switcher: SwitcherData;
+  choice: string | null;
+  owner: boolean;
 }
 
 function useCollapse(collapsed: boolean) {
@@ -55,6 +59,9 @@ function WideRail({
   user,
   loadedAt,
   collapsed,
+  switcher,
+  choice,
+  owner,
 }: Props) {
   const path = usePathname();
   const collapse = useCollapse(collapsed);
@@ -80,7 +87,9 @@ function WideRail({
         </button>
       </header>
 
-      {failed > 0 && <FailedMail count={failed} />}
+      <Switcher data={switcher} choice={choice} owner={owner} />
+
+      {failed > 0 && <FailedMail count={failed} canRetry={owner} />}
 
       <nav className="flex flex-col gap-0.5">
         <BoxRow href="/" label="All mail" count={unread} active={path === "/"}>
@@ -100,17 +109,22 @@ function WideRail({
         </BoxRow>
       </nav>
 
+      {/* A one-address view is already that address, so it has no list. */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 scroll-clean">
-        {named.length > 0 && (
+        {choice === null && named.length > 0 && (
           <section>
-            <GroupLabel action={{ href: "/settings", label: "Add an address" }}>
+            <GroupLabel action={owner ? { href: "/settings", label: "Add an address" } : undefined}>
               Addresses
             </GroupLabel>
-            <NamedAddresses named={named} path={path} />
+            {owner ? (
+              <NamedAddresses named={named} path={path} />
+            ) : (
+              named.map((inbox) => <AddressRow key={inbox.address} inbox={inbox} path={path} named />)
+            )}
           </section>
         )}
 
-        {catchAll.length > 0 && (
+        {choice === null && catchAll.length > 0 && (
           <section>
             <GroupLabel>Catch-all · new</GroupLabel>
             {catchAll.map((inbox) => (
@@ -121,13 +135,15 @@ function WideRail({
       </div>
 
       <div className="flex flex-col gap-3">
-        <Link
-          href="/settings"
-          className="flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line text-[12.5px] text-ink3 transition-colors hover:bg-hover hover:text-ink2"
-        >
-          <PlusIcon className="size-3.5" />
-          New address
-        </Link>
+        {owner && (
+          <Link
+            href="/settings"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line text-[12.5px] text-ink3 transition-colors hover:bg-hover hover:text-ink2"
+          >
+            <PlusIcon className="size-3.5" />
+            New address
+          </Link>
+        )}
 
         <div className="flex items-center gap-2.5 px-1">
           <span
@@ -191,12 +207,16 @@ function NarrowRail({
   trashed,
   user,
   collapsed,
+  switcher,
+  choice,
+  owner,
 }: Props) {
   const path = usePathname();
   const expand = useCollapse(collapsed);
 
   return (
-    <aside className="flex w-[64px] flex-none flex-col items-center gap-3.5 border-r border-line bg-rail py-4 backdrop-blur-[20px]">
+    // Raised so the switcher's menu, which opens to the side, sits over the list.
+    <aside className="relative z-10 flex w-[64px] flex-none flex-col items-center gap-3.5 border-r border-line bg-rail py-4 backdrop-blur-[20px]">
       <span
         className="size-[26px] flex-none rotate-45 rounded-[7px]"
         style={{ background: "var(--brand)" }}
@@ -210,6 +230,8 @@ function NarrowRail({
       >
         <ChevronIcon className="size-3.5" />
       </button>
+
+      <Switcher data={switcher} choice={choice} owner={owner} compact />
 
       <nav className="flex flex-col gap-[5px]">
         <BoxTarget href="/" title="All mail" count={unread} active={path === "/"}>
@@ -234,25 +256,31 @@ function NarrowRail({
         </BoxTarget>
       </nav>
 
-      <span className="h-px w-6 flex-none bg-line" />
+      {choice === null && <span className="h-px w-6 flex-none bg-line" />}
 
       <div className="flex min-h-0 flex-1 flex-col gap-[5px] scroll-clean">
-        {named.map((inbox) => (
-          <AddressTarget key={inbox.address} inbox={inbox} path={path} named />
-        ))}
-        {catchAll.map((inbox) => (
-          <AddressTarget key={inbox.address} inbox={inbox} path={path} />
-        ))}
+        {choice === null && (
+          <>
+            {named.map((inbox) => (
+              <AddressTarget key={inbox.address} inbox={inbox} path={path} named />
+            ))}
+            {catchAll.map((inbox) => (
+              <AddressTarget key={inbox.address} inbox={inbox} path={path} />
+            ))}
+          </>
+        )}
       </div>
 
-      <Link
-        href="/settings"
-        title="New address"
-        aria-label="New address"
-        className="flex size-[34px] flex-none items-center justify-center rounded-[11px] border border-dashed border-line text-ink3 transition-colors hover:bg-hover hover:text-ink2"
-      >
-        <PlusIcon className="size-3.5" />
-      </Link>
+      {owner && (
+        <Link
+          href="/settings"
+          title="New address"
+          aria-label="New address"
+          className="flex size-[34px] flex-none items-center justify-center rounded-[11px] border border-dashed border-line text-ink3 transition-colors hover:bg-hover hover:text-ink2"
+        >
+          <PlusIcon className="size-3.5" />
+        </Link>
+      )}
 
       <Link
         href="/settings"

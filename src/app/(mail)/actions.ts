@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
 import { record } from "@/lib/auth/audit";
-import { requireOwner, requireViewer } from "@/lib/auth/require";
+import { readViewer, requireOwner, requireViewer } from "@/lib/auth/require";
+import { VIEW_COOKIE } from "@/lib/auth/viewer";
 import { deleteDraft, saveDraft, type DraftInput } from "@/lib/mail/drafts";
 import { retryFailed } from "@/lib/mail/reconcile";
 import { draft, outgoing } from "@/lib/mail/limits";
@@ -17,6 +19,8 @@ import {
   type SearchScope,
 } from "@/lib/mail/queries";
 import { formatWhen } from "@/lib/format";
+import { normalizeAddress } from "@/lib/mail/identity";
+import { reachesAddress } from "@/lib/mail/reach";
 import { renderHtml } from "@/lib/mail/render";
 import { captureMessageId, sendNew, sendReply } from "@/lib/mail/send";
 import { allowSender, disallowSender } from "@/lib/mail/images";
@@ -192,4 +196,25 @@ export async function retryFailedMail() {
   const result = await retryFailed();
   revalidatePath("/", "layout");
   return result;
+}
+
+export async function setView(choice: string) {
+  // Read without the request cache, so the render that follows does not reuse
+  // a viewer resolved from the old cookie.
+  const viewer = await readViewer();
+  if (!viewer) redirect("/login");
+
+  const value = normalizeAddress(choice);
+  if (value !== "all" && !(await reachesAddress(viewer.allowed, value))) notFound();
+
+  (await cookies()).set(VIEW_COOKIE, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+
+  revalidatePath("/", "layout");
+  redirect("/");
 }

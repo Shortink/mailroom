@@ -5,7 +5,7 @@ import { retryFailedMail } from "@/app/(mail)/actions";
 
 // Ingest gives up after a few attempts and nothing picks the message back up
 // on its own, so this is the way out of that state.
-export function FailedMail({ count }: { count: number }) {
+export function FailedMail({ count, canRetry }: { count: number; canRetry: boolean }) {
   const [pending, startTransition] = useTransition();
 
   return (
@@ -23,14 +23,16 @@ export function FailedMail({ count }: { count: number }) {
         Resend took delivery but the content never arrived.
       </p>
 
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => startTransition(async () => void (await retryFailedMail()))}
-        className="mt-2 rounded-md border border-line px-2 py-1 font-mono text-[10px] text-ink2 transition-colors hover:bg-hover disabled:opacity-50"
-      >
-        {pending ? "trying…" : "try again"}
-      </button>
+      {canRetry && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => startTransition(async () => void (await retryFailedMail()))}
+          className="mt-2 rounded-md border border-line px-2 py-1 font-mono text-[10px] text-ink2 transition-colors hover:bg-hover disabled:opacity-50"
+        >
+          {pending ? "trying…" : "try again"}
+        </button>
+      )}
     </div>
   );
 }
