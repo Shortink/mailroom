@@ -102,3 +102,24 @@ export async function seedHtmlMessage(
 
   return thread.id;
 }
+
+export async function seedAddressThread(address: string, subject: string, status: "complete" | "failed" = "complete") {
+  const at = new Date();
+  await db.insert(addresses).values({ address }).onConflictDoNothing();
+  const [thread] = await db
+    .insert(threads)
+    .values({ address, subject, lastMessageAt: at, participants: ["friend@vendor.example", address], messageCount: 1 })
+    .returning();
+  await db.insert(messages).values({
+    threadId: thread.id,
+    direction: "inbound",
+    status,
+    subject,
+    textBody: `${subject}, sent to ${address}.`,
+    fromAddress: "friend@vendor.example",
+    fromName: "A Friend",
+    deliveredTo: address,
+    receivedAt: at,
+  });
+  return thread.id;
+}
