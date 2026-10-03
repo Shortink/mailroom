@@ -20,6 +20,7 @@ export default async function AddressSettingsPage({
   return (
     <AddressSettings
       detail={detail}
+      canManage={viewer.role === "owner"}
       when={{
         firstSeen: detail.firstSeen ? formatDay(detail.firstSeen, zone) : "never",
         lastActivity: detail.lastActivity ? formatWhen(detail.lastActivity, zone) : "never",

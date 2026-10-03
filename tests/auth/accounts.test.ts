@@ -60,7 +60,7 @@ describe("invites", () => {
   }
 
   it("issues a token that validates once and then does not", async () => {
-    const token = await createInvite(await owner());
+    const token = await createInvite(await owner(), ["alex@example.test"]);
 
     expect(await inviteIsValid(token)).toBe(true);
     await acceptInvite(token, "second@example.test", "another good password");
@@ -68,7 +68,7 @@ describe("invites", () => {
   });
 
   it("creates the invited user", async () => {
-    const token = await createInvite(await owner());
+    const token = await createInvite(await owner(), ["alex@example.test"]);
     await acceptInvite(token, "second@example.test", "another good password");
 
     const [user] = await db.select().from(users).where(eq(users.email, "second@example.test"));
@@ -78,13 +78,13 @@ describe("invites", () => {
   });
 
   it("stores the token hashed, never in the clear", async () => {
-    const token = await createInvite(await owner());
+    const token = await createInvite(await owner(), ["alex@example.test"]);
     const [row] = await db.select().from(invites);
     expect(row.tokenHash).not.toBe(token);
   });
 
   it("rejects an expired invite", async () => {
-    const token = await createInvite(await owner());
+    const token = await createInvite(await owner(), ["alex@example.test"]);
     await db.update(invites).set({ expiresAt: new Date(Date.now() - 1000) });
 
     expect(await inviteIsValid(token)).toBe(false);
@@ -97,7 +97,7 @@ describe("invites", () => {
   });
 
   it("refuses to reuse an email that already exists", async () => {
-    const token = await createInvite(await owner());
+    const token = await createInvite(await owner(), ["alex@example.test"]);
     await expect(acceptInvite(token, "owner@example.test", "password here")).rejects.toThrow();
   });
 });

@@ -12,6 +12,8 @@ export type SecurityEvent =
   | "invite.accepted"
   | "account.created"
   | "session.revoked"
+  | "member.changed"
+  | "member.removed"
   | "message.sent";
 
 // Kept separate from login_attempts, which drives rate limiting and is pruned

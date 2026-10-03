@@ -7,7 +7,15 @@ import { colorForHue, hueFor, localPart, SWATCH_HUES } from "@/lib/mail/identity
 import type { AddressDetail } from "@/lib/mail/addresses";
 import { useCompose } from "./Compose";
 
-export function AddressSettings({ detail, when }: { detail: AddressDetail; when: Stamps }) {
+export function AddressSettings({
+  detail,
+  when,
+  canManage,
+}: {
+  detail: AddressDetail;
+  when: Stamps;
+  canManage: boolean;
+}) {
   const compose = useCompose();
   const [, startTransition] = useTransition();
 
@@ -54,8 +62,11 @@ export function AddressSettings({ detail, when }: { detail: AddressDetail; when:
       </div>
 
       <p className="mt-1.5 font-mono text-[11.5px] text-ink3">
-        {detail.address} · {detail.named ? "named address" : "catch-all · unnamed"} ·{" "}
-        {detail.named ? "added by you" : "detected by catch-all"}
+        {detail.address}
+        {canManage &&
+          (detail.named
+            ? " · named address · added by you"
+            : " · catch-all · unnamed · detected by catch-all")}
       </p>
 
       <div className="mt-7 grid grid-cols-3 gap-[11px]">
@@ -64,32 +75,34 @@ export function AddressSettings({ detail, when }: { detail: AddressDetail; when:
         <Stat label="Last activity" value={when.lastActivity} sub={when.lastActivityExact} />
       </div>
 
-      <Card title="Sidebar">
-        <Row
-          title="Keep under Addresses"
-          note="Off puts it back under catch-all with the addresses nobody named."
-        >
-          <Switch
-            label="Keep under Addresses"
-            on={named}
-            onChange={(value) => {
-              setNamed(value);
-              persist({ pinned: value });
-            }}
-          />
-        </Row>
+      {canManage && (
+        <Card title="Sidebar">
+          <Row
+            title="Keep under Addresses"
+            note="Off puts it back under catch-all with the addresses nobody named."
+          >
+            <Switch
+              label="Keep under Addresses"
+              on={named}
+              onChange={(value) => {
+                setNamed(value);
+                persist({ pinned: value });
+              }}
+            />
+          </Row>
 
-        <Row title="Hide from the sidebar" note="Mail still arrives, and search still finds it.">
-          <Switch
-            label="Hide from the sidebar"
-            on={hidden}
-            onChange={(value) => {
-              setHidden(value);
-              persist({ hidden: value });
-            }}
-          />
-        </Row>
-      </Card>
+          <Row title="Hide from the sidebar" note="Mail still arrives, and search still finds it.">
+            <Switch
+              label="Hide from the sidebar"
+              on={hidden}
+              onChange={(value) => {
+                setHidden(value);
+                persist({ hidden: value });
+              }}
+            />
+          </Row>
+        </Card>
+      )}
 
       <Card title="Delivery">
         <Row
@@ -130,14 +143,16 @@ export function AddressSettings({ detail, when }: { detail: AddressDetail; when:
       </Card>
 
       <Card title="Identity">
-        <Row title="Label" note="What the rail calls this address.">
-          <Input
-            value={label}
-            onChange={setLabel}
-            onCommit={() => persist({ label: label.trim() || null })}
-            placeholder={localPart(detail.address)}
-          />
-        </Row>
+        {canManage && (
+          <Row title="Label" note="What the rail calls this address.">
+            <Input
+              value={label}
+              onChange={setLabel}
+              onCommit={() => persist({ label: label.trim() || null })}
+              placeholder={localPart(detail.address)}
+            />
+          </Row>
+        )}
 
         <Row title="Display name" note="The name recipients see on mail sent from here.">
           <Input

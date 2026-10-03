@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeAddress } from "./identity";
 
 export const MAX_SUBJECT = 512;
 export const MAX_BODY = 256 * 1024;
@@ -47,3 +48,10 @@ export const addressSettings = z.object({
 });
 
 export const addressOrder = z.array(z.email()).max(500);
+
+// An invite or an edit hands out at least one address, never none.
+export const memberAddressList = z
+  .array(z.string().transform(normalizeAddress).pipe(z.email()))
+  .min(1)
+  .max(50)
+  .transform((list) => [...new Set(list)]);

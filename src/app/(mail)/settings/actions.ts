@@ -7,13 +7,15 @@ import { z } from "zod";
 import { record } from "@/lib/auth/audit";
 import { requireOwner, requireViewer } from "@/lib/auth/require";
 import { createInvite } from "@/lib/auth/invites";
+import { removeMember, setMemberAddresses } from "@/lib/auth/people";
+import { Refusal } from "@/lib/auth/refusal";
 import { revokeSessions } from "@/lib/auth/revoke";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import { normalizeAddress } from "@/lib/mail/identity";
 import { reachesAddress } from "@/lib/mail/reach";
 import { reorderAddresses, updateAddress, type AddressPatch } from "@/lib/mail/addresses";
 import { setLoadsImages } from "@/lib/mail/images";
-import { addressOrder, addressSettings } from "@/lib/mail/limits";
+import { addressOrder, addressSettings, memberAddressList } from "@/lib/mail/limits";
 import { registerAccount } from "@/lib/mail/queries";
 
 export async function addAccount(address: string) {
@@ -29,13 +31,38 @@ export async function addAccount(address: string) {
   return { error: null };
 }
 
-export async function issueInvite() {
+export async function issueInvite(addresses: string[]) {
   const viewer = await requireOwner();
-  const token = await createInvite(viewer.userId);
-  await record("invite.created", { actor: viewer.userId });
+  const parsed = memberAddressList.safeParse(addresses);
+  if (!parsed.success) return { error: "Choose at least one address.", token: null };
 
+  const token = await createInvite(viewer.userId, parsed.data);
+  await record("invite.created", { actor: viewer.userId, detail: { addresses: parsed.data } });
   revalidatePath("/settings");
-  return { token };
+  return { error: null, token };
+}
+
+export async function updateMember(userId: string, addresses: string[]) {
+  const viewer = await requireOwner();
+  const parsed = memberAddressList.safeParse(addresses);
+  if (!parsed.success) return { error: "Choose at least one address." };
+
+  try {
+    await setMemberAddresses(userId, parsed.data);
+  } catch (error) {
+    return { error: error instanceof Refusal ? error.message : "Could not change that." };
+  }
+  await record("member.changed", { actor: viewer.userId, detail: { userId, addresses: parsed.data } });
+  revalidatePath("/", "layout");
+  return { error: null };
+}
+
+export async function deleteMember(userId: string) {
+  const viewer = await requireOwner();
+  if (await removeMember(userId)) {
+    await record("member.removed", { actor: viewer.userId, detail: { userId } });
+  }
+  revalidatePath("/", "layout");
 }
 
 export async function signOut() {

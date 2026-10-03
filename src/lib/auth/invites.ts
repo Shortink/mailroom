@@ -2,14 +2,24 @@ import { randomBytes } from "node:crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/client";
 import { invites, users } from "../db/schema";
+import { memberAddressList } from "../mail/limits";
 import { hashPassword, verifyPassword } from "./password";
-import { createUser } from "./users";
+import { grantAddresses } from "./people";
+import { Refusal } from "./refusal";
+import { MIN_PASSWORD } from "./users";
 
 const TTL_HOURS = 48;
+const TAKEN = "An account with that email already exists.";
+
+// drizzle wraps the driver's error, so the Postgres code sits on the cause.
+function uniqueViolation(error: unknown) {
+  return error instanceof Error && (error.cause as { code?: string } | undefined)?.code === "23505";
+}
 
 // The token names its own row in front of the secret, so a lookup is one
 // indexed read rather than a hash per open invite.
-export async function createInvite(createdBy: string, ttlHours = TTL_HOURS) {
+export async function createInvite(createdBy: string, raw: string[], ttlHours = TTL_HOURS) {
+  const list = memberAddressList.parse(raw);
   const selector = randomBytes(8).toString("hex");
   const secret = randomBytes(24).toString("hex");
 
@@ -17,6 +27,7 @@ export async function createInvite(createdBy: string, ttlHours = TTL_HOURS) {
     selector,
     tokenHash: await hashPassword(secret),
     createdBy,
+    addresses: list,
     expiresAt: new Date(Date.now() + ttlHours * 60 * 60 * 1000),
   });
 
@@ -48,29 +59,37 @@ export async function inviteIsValid(token: string) {
 
 export async function acceptInvite(token: string, email: string, password: string) {
   const invite = await findOpenInvite(token);
-  if (!invite) throw new Error("That invite is no longer valid.");
-
-  const [existing] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, email.trim().toLowerCase()));
-  if (existing) throw new Error("An account with that email already exists.");
-
-  // Claim the invite before creating anything, so two concurrent submissions
-  // cannot both turn one token into an account.
-  const claimed = await db
-    .update(invites)
-    .set({ acceptedAt: new Date() })
-    .where(and(eq(invites.id, invite.id), isNull(invites.acceptedAt)))
-    .returning({ id: invites.id });
-
-  if (claimed.length === 0) throw new Error("That invite is no longer valid.");
-
-  try {
-    return await createUser(email, password, "member");
-  } catch (error) {
-    // Hand the invite back if the account could not be created.
-    await db.update(invites).set({ acceptedAt: null }).where(eq(invites.id, invite.id));
-    throw error;
+  if (!invite) throw new Refusal("That invite is no longer valid.");
+  if (password.length < MIN_PASSWORD) {
+    throw new Refusal(`Password must be at least ${MIN_PASSWORD} characters.`);
   }
+
+  const address = email.trim().toLowerCase();
+  const passwordHash = await hashPassword(password);
+
+  // Claimed, created and granted together, so a failure anywhere leaves the
+  // invite open and no half-made member behind.
+  return db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(invites)
+      .set({ acceptedAt: new Date() })
+      .where(and(eq(invites.id, invite.id), isNull(invites.acceptedAt)))
+      .returning({ id: invites.id });
+    if (claimed.length === 0) throw new Refusal("That invite is no longer valid.");
+
+    const [existing] = await tx.select({ id: users.id }).from(users).where(eq(users.email, address));
+    if (existing) throw new Refusal(TAKEN);
+
+    // A second accept for the same email can commit between that check and
+    // this insert, and then the unique index is what says so.
+    const [user] = await tx
+      .insert(users)
+      .values({ email: address, passwordHash, role: "member" })
+      .returning()
+      .catch((error: unknown) => {
+        throw uniqueViolation(error) ? new Refusal(TAKEN) : error;
+      });
+    await grantAddresses(tx, user.id, invite.addresses);
+    return user;
+  });
 }

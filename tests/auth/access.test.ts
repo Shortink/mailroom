@@ -44,7 +44,7 @@ const { listThreads, listInboxes, listSwitcher, loadThread, loadMessageHtml, loa
   await import("../../src/lib/mail/queries");
 const { listDrafts, loadDraft } = await import("../../src/lib/mail/drafts");
 const { loadAddress } = await import("../../src/lib/mail/addresses");
-const { requireAddress, requireOwner } = await import("../../src/lib/auth/require");
+const { readViewer, requireAddress, requireOwner } = await import("../../src/lib/auth/require");
 const { GET: getAttachment } = await import("../../src/app/api/attachments/[key]/route");
 const actions = await import("../../src/app/(mail)/actions");
 const settings = await import("../../src/app/(mail)/settings/actions");
@@ -270,12 +270,37 @@ describe("a member's writes on the owner's thread", () => {
   it.each([
     ["saveOrder", () => settings.saveOrder([ALEX])],
     ["addAccount", () => settings.addAccount("new@example.test")],
-    ["issueInvite", () => settings.issueInvite()],
+    ["issueInvite", () => settings.issueInvite([ALEX])],
+    ["updateMember", () => settings.updateMember(memberId, [ALEX])],
+    ["deleteMember", () => settings.deleteMember(memberId)],
     ["alwaysShowImages", () => actions.alwaysShowImages(alex.messageId)],
     ["stopShowingImages", () => actions.stopShowingImages("sender@vendor.test")],
     ["retryFailedMail", () => actions.retryFailedMail()],
   ])("is refused %s", async (_name, call) => {
     await expect(call()).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("the owner managing people", () => {
+  beforeEach(async () => {
+    await signInAs(ownerId);
+  });
+
+  it("cannot invite or edit with no addresses", async () => {
+    expect(await settings.issueInvite([])).toMatchObject({ error: expect.any(String), token: null });
+    expect(await settings.updateMember(memberId, [])).toMatchObject({ error: expect.any(String) });
+  });
+
+  it("cannot edit or remove an owner", async () => {
+    expect(await settings.updateMember(ownerId, [ALEX])).toMatchObject({ error: expect.any(String) });
+    await settings.deleteMember(ownerId);
+    expect(await readViewer()).not.toBeNull();
+  });
+
+  it("ends a removed member's session at once", async () => {
+    await settings.deleteMember(memberId);
+    await signInAs(memberId);
+    expect(await readViewer()).toBeNull();
   });
 });
 

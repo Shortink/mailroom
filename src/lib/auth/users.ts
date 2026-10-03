@@ -3,7 +3,7 @@ import { db } from "../db/client";
 import { users } from "../db/schema";
 import { hashPassword } from "./password";
 
-const MIN_PASSWORD = 8;
+export const MIN_PASSWORD = 8;
 
 export async function createUser(email: string, password: string, role: "owner" | "member") {
   if (password.length < MIN_PASSWORD) {
